@@ -9,16 +9,22 @@ import { useMealsStore } from "@/stores/meals"
 import { useRecipesStore } from "@/stores/recipes"
 import { useShoppingStore } from "@/stores/shopping"
 import { useAppStore } from "@/stores/app"
+import { useInboxStore } from "@/stores/inbox"
+import { useReviewsStore } from "@/stores/reviews"
+import { useFinancialStore } from "@/stores/financial"
 
 /**
  * Hook to initialize all stores and load data
+ * Uses global Zustand state for persistence across navigations
  */
 export function useInitializeData() {
-  const [isInitialized, setIsInitialized] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Use global state from Zustand - persists across navigations
+  const isDataLoaded = useAppStore((state) => state.isDataLoaded)
+  const setDataLoaded = useAppStore((state) => state.setDataLoaded)
   const initialize = useAppStore((state) => state.initialize)
+
   const loadGoals = useGoalsStore((state) => state.loadGoals)
   const loadTasks = useTasksStore((state) => state.loadTasks)
   const loadRecurrenceTemplates = useTasksStore((state) => state.loadRecurrenceTemplates)
@@ -28,14 +34,16 @@ export function useInitializeData() {
   const loadRecipes = useRecipesStore((state) => state.loadRecipes)
   const loadLists = useShoppingStore((state) => state.loadLists)
   const loadItems = useShoppingStore((state) => state.loadItems)
+  const loadInboxItems = useInboxStore((state) => state.loadItems)
+  const loadReviews = useReviewsStore((state) => state.loadReviews)
+  const loadSnapshots = useFinancialStore((state) => state.loadSnapshots)
 
   useEffect(() => {
     async function loadAllData() {
-      if (isInitialized) return
+      // Skip if already loaded - this is the key for instant navigation
+      if (isDataLoaded) return
 
       try {
-        setIsLoading(true)
-
         // Initialize app first
         await initialize()
 
@@ -50,20 +58,22 @@ export function useInitializeData() {
           loadRecipes(),
           loadLists(),
           loadItems(),
+          loadInboxItems(),
+          loadReviews(),
+          loadSnapshots(),
         ])
 
-        setIsInitialized(true)
+        setDataLoaded()
       } catch (err) {
         setError("Failed to load data")
         console.error("Data initialization error:", err)
-      } finally {
-        setIsLoading(false)
       }
     }
 
     loadAllData()
   }, [
-    isInitialized,
+    isDataLoaded,
+    setDataLoaded,
     initialize,
     loadGoals,
     loadTasks,
@@ -74,9 +84,12 @@ export function useInitializeData() {
     loadRecipes,
     loadLists,
     loadItems,
+    loadInboxItems,
+    loadReviews,
+    loadSnapshots,
   ])
 
-  return { isInitialized, isLoading, error }
+  return { isDataLoaded, isLoading: !isDataLoaded && !error, error }
 }
 
 /**

@@ -41,6 +41,7 @@ export default function TasksPage() {
   const [formTimePreference, setFormTimePreference] = useState<TimePreference>("morning")
   const [formDate, setFormDate] = useState<Date>(new Date())
   const [formDuration, setFormDuration] = useState("30")
+  const [formMinimumVersion, setFormMinimumVersion] = useState("")
 
   const tasks = useTasksStore((state) => state.tasks)
   const addTask = useTasksStore((state) => state.addTask)
@@ -72,13 +73,16 @@ export default function TasksPage() {
       timePreference: formTimePreference,
       scheduledDate: formatDate(formDate),
       durationEstimate: parseInt(formDuration) || 30,
+      minimumVersion: formMinimumVersion || undefined,
       status: "pending",
+      deferCount: 0,
     })
 
     // Reset form
     setFormTitle("")
     setFormDescription("")
     setFormDuration("30")
+    setFormMinimumVersion("")
     setDialogOpen(false)
   }
 
@@ -186,6 +190,17 @@ export default function TasksPage() {
                       placeholder="30"
                     />
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Fallback Version (optional)</Label>
+                  <Input
+                    value={formMinimumVersion}
+                    onChange={(e) => setFormMinimumVersion(e.target.value)}
+                    placeholder="If I can't do the full task, I'll at least..."
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The smallest version of this task that still counts
+                  </p>
                 </div>
               </div>
               <DialogFooter>

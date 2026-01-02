@@ -15,10 +15,24 @@ export type Priority = "need" | "want" | "someday"
 export type ItemStatus = "pending" | "bought"
 export type Sentiment = "positive" | "neutral" | "negative"
 export type GoalAlignment = "positive" | "neutral" | "negative" | "drift"
-export type TrainingType = "muay-thai" | "cardio" | "strength" | "flexibility" | "other"
+export type TrainingType = "muay-thai" | "cardio" | "strength" | "flexibility" | "dj-practice" | "other"
 export type MealType = "breakfast" | "lunch" | "dinner" | "snack"
 export type BlockType = "work" | "training" | "meal_prep" | "personal" | "buffer"
+export type BlockDepth = "deep" | "shallow" | "recovery"
 export type RecurrenceFrequency = "daily" | "weekly" | "biweekly" | "monthly"
+export type CoachTone = "gentle" | "balanced" | "intense"
+export type JournalPromptMode = "rotating" | "pick" | "none"
+export type PromptCategory =
+  | "energy"
+  | "resistance"
+  | "consistency"
+  | "focus"
+  | "priority"
+  | "progress"
+  | "honesty"
+  | "clarity"
+  | "general"
+export type PromptFrequency = "daily" | "weekly" | "monthly" | "quarterly"
 
 // Goals
 export interface YearlyGoal {
@@ -29,6 +43,9 @@ export interface YearlyGoal {
   successCriteria: string
   year: number
   status: GoalStatus
+  priority: number // Forced ranking, unique, no ties
+  isHellYes?: boolean // Commitment check
+  identityStatement?: string // "Become someone who..."
   createdAt: Date
   updatedAt: Date
 }
@@ -41,6 +58,7 @@ export interface MonthlyGoal {
   successCriteria?: string
   month: string // Format: "2025-01"
   status: GoalStatus
+  priority: number
   createdAt: Date
   updatedAt: Date
 }
@@ -73,6 +91,11 @@ export interface Task {
   completedAt?: Date
   createdAt: Date
   updatedAt: Date
+  // Behavioral fields
+  minimumVersion?: string // Fallback: "Can't do full task? Do this instead"
+  deferCount: number // Track avoidance (default 0)
+  resistanceNote?: string // Why is this hard?
+  isHardThing?: boolean // Mark difficult tasks
 }
 
 export interface RecurrenceTemplate {
@@ -81,12 +104,16 @@ export interface RecurrenceTemplate {
   aspect: LifeAspect
   frequency: RecurrenceFrequency
   daysOfWeek?: number[] // 0-6, Sunday = 0
+  dayOfMonth?: number // 1-31, for monthly recurrence
+  biweeklyStartDate?: string // Anchor date for biweekly calculation
   timePreference: TimePreference
   hardScheduledTime?: string
   durationEstimate?: number
   linkedGoalId?: string
+  minimumVersion?: string // Inherited by generated tasks
   isActive: boolean
   createdAt: Date
+  updatedAt?: Date
 }
 
 // Journal
@@ -94,13 +121,30 @@ export interface JournalEntry {
   id: string
   timestamp: Date
   content: string
+  // Auto-analyzed
   detectedAspects: LifeAspect[]
   sentimentScore: number // -1 to 1
   goalAlignment: GoalAlignment
   linkedTaskIds?: string[]
   llmAnalysis?: string
+  // Prompt tracking (internal)
+  promptUsed?: string // Which prompt triggered this entry
+  promptCategory?: PromptCategory // Internal category for analysis
+  // Energy/Sleep (embedded, not separate tracking)
+  energyLevel?: number // 1-5, how you're feeling
+  sleepQuality?: number // 1-5, for morning entries
+  sleepHours?: number // Optional, approximate hours slept
   createdAt: Date
   updatedAt: Date
+}
+
+// Journal Prompts
+export interface JournalPrompt {
+  id: string
+  category: PromptCategory
+  prompt: string
+  frequency: PromptFrequency
+  aspect?: LifeAspect
 }
 
 // Training
@@ -109,10 +153,12 @@ export interface TrainingSession {
   date: string
   type: TrainingType
   duration: number // minutes
-  intensity: number // 1-10
-  notes?: string
+  intensity: number // 1-10 (for DJ: focus level)
+  notes?: string // For DJ: what you practiced
   linkedTaskId?: string
+  isHardThing?: boolean // Was this a challenge/pushed yourself?
   createdAt: Date
+  updatedAt: Date
 }
 
 // Meals
@@ -125,6 +171,7 @@ export interface Meal {
   recipeId?: string
   notes?: string
   createdAt: Date
+  updatedAt: Date
 }
 
 // Recipes
@@ -187,13 +234,74 @@ export interface ShoppingItem {
 export interface ScheduleBlock {
   id: string
   date: string
-  startTime: string
-  endTime: string
+  startTime: string // "09:00"
+  endTime: string // "17:00"
   title: string
   type: BlockType
   linkedTaskId?: string
   notes?: string
+  depth: BlockDepth // Focus depth tracking
   createdAt: Date
+  updatedAt: Date
+}
+
+// GTD Inbox
+export interface InboxItem {
+  id: string
+  content: string
+  capturedAt: Date
+  processedAt?: Date
+  convertedToTaskId?: string
+  convertedToGoalId?: string
+  trashedAt?: Date
+}
+
+// Weekly Review
+export interface WeeklyReview {
+  id: string
+  weekOf: string // "2025-W03"
+  completedAt: Date
+  // Reflection
+  wins: string[]
+  struggles: string[]
+  resistancePatterns: string[] // What did you avoid?
+  // Priority check
+  stopDoingItems: string[]
+  nextWeekFocus: string // The ONE thing
+  // Self-assessment
+  selfRating: number // 1-10 honest assessment
+  effortHonesty: string // "Am I being honest about my effort?"
+  // Focus tracking
+  deepWorkHours: number
+  shallowWorkHours: number
+  // Planning
+  nextWeekIntentions: string[]
+}
+
+// Financial Snapshots
+export interface FinancialSnapshot {
+  id: string
+  date: string // "2025-01-31" - typically end of month
+  // Track what matters (all optional)
+  savingsBalance?: number
+  netWorth?: number
+  monthlyTarget?: number
+  actualSaved?: number
+  // Goal check-in
+  linkedGoalId?: string
+  onTrack: boolean
+  notes?: string
+  createdAt: Date
+}
+
+// Streaks
+export interface StreakData {
+  type: "training" | "cooking" | "journal" | "deep-work"
+  current: number
+  longest: number
+  lastActivityDate?: string
+  lastMissDate?: string
+  daysSinceDoubleMiss: number // The real metric
 }
 
 // Onboarding State
@@ -255,6 +363,35 @@ export interface MonthlySummary {
   }[]
 }
 
+// Resistance Analysis
+export interface ResistanceAnalysis {
+  highResistanceTasks: Task[]
+  patterns: string[]
+  suggestions: string[]
+}
+
+// Deep Focus Analysis
+export interface DeepFocusAnalysis {
+  todayDeep: number // hours
+  todayShallow: number
+  weeklyDeep: number
+  weeklyShallow: number
+  ratio: number // deep / total
+  targetMet: boolean
+  fragmentationScore: number
+  alerts: string[]
+}
+
+// Compound Progress
+export interface CompoundProgress {
+  aspect: LifeAspect
+  totalActions: number
+  totalTime: number // minutes
+  humanizedTime: string // "47 sessions = 70+ hours"
+  trend: "accelerating" | "steady" | "declining"
+  projectedYearEnd: string
+}
+
 // Settings
 export interface AppSettings {
   id: string
@@ -262,6 +399,15 @@ export interface AppSettings {
   ollamaModel?: string
   theme: "light" | "dark" | "system"
   onboardingCompleted: boolean
+  weekStartsOn: 0 | 1 // Sunday (0) or Monday (1)
+  // Prompt settings
+  weeklyReviewDay: number // 0-6, default 0 (Sunday)
+  weeklyReviewTime: string // "18:00"
+  journalPromptMode: JournalPromptMode
+  preferredPromptCategories: PromptCategory[]
+  coachTone: CoachTone
+  deepWorkDailyTarget: number // hours, default 4
+  showPrincipleTooltips: boolean
   createdAt: Date
   updatedAt: Date
 }

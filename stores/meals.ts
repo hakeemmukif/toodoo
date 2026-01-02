@@ -9,7 +9,7 @@ interface MealsState {
 
   // Actions
   loadMeals: () => Promise<void>
-  addMeal: (meal: Omit<Meal, "id" | "createdAt">) => Promise<string>
+  addMeal: (meal: Omit<Meal, "id" | "createdAt" | "updatedAt">) => Promise<string>
   updateMeal: (id: string, updates: Partial<Meal>) => Promise<void>
   deleteMeal: (id: string) => Promise<void>
 
@@ -46,6 +46,7 @@ export const useMealsStore = create<MealsState>((set, get) => ({
       ...mealData,
       id,
       createdAt: new Date(),
+      updatedAt: new Date(),
     }
     await db.meals.add(meal)
     set((state) => ({ meals: [meal, ...state.meals] }))
@@ -53,9 +54,10 @@ export const useMealsStore = create<MealsState>((set, get) => ({
   },
 
   updateMeal: async (id, updates) => {
-    await db.meals.update(id, updates)
+    const updatedData = { ...updates, updatedAt: new Date() }
+    await db.meals.update(id, updatedData)
     set((state) => ({
-      meals: state.meals.map((m) => (m.id === id ? { ...m, ...updates } : m)),
+      meals: state.meals.map((m) => (m.id === id ? { ...m, ...updatedData } : m)),
     }))
   },
 

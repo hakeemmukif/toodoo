@@ -97,10 +97,14 @@ export const useTasksStore = create<TasksState>((set, get) => ({
   },
 
   deferTask: async (id, newDate) => {
-    await get().updateTask(id, {
-      status: "deferred",
-      scheduledDate: newDate,
-    })
+    const task = get().tasks.find((t) => t.id === id)
+    if (task) {
+      await get().updateTask(id, {
+        status: "deferred",
+        scheduledDate: newDate,
+        deferCount: task.deferCount + 1,
+      })
+    }
   },
 
   // Recurrence Templates
@@ -135,7 +139,9 @@ export const useTasksStore = create<TasksState>((set, get) => ({
   },
 
   generateRecurringTasks: async () => {
-    const templates = await db.recurrenceTemplates.where("isActive").equals(1).toArray()
+    // Use filter instead of .equals(1) for boolean - more semantic and type-safe
+    const allTemplates = await db.recurrenceTemplates.toArray()
+    const templates = allTemplates.filter((t) => t.isActive)
     const today = new Date()
     const endOfWeek = new Date(today)
     endOfWeek.setDate(today.getDate() + (7 - today.getDay()))
@@ -166,17 +172,28 @@ export const useTasksStore = create<TasksState>((set, get) => ({
             shouldGenerate = template.daysOfWeek?.includes(dayOfWeek) ?? false
             break
           case "biweekly":
-            // Simple biweekly - every other week on specified days
-            const weekNumber = Math.floor(
-              (current.getTime() - new Date(current.getFullYear(), 0, 1).getTime()) /
-                (7 * 24 * 60 * 60 * 1000)
+            // Biweekly using anchor date for consistent behavior across years
+            const anchorDate = template.biweeklyStartDate
+              ? new Date(template.biweeklyStartDate)
+              : template.createdAt
+            const daysSinceAnchor = Math.floor(
+              (current.getTime() - anchorDate.getTime()) / (24 * 60 * 60 * 1000)
             )
+            const weeksSinceAnchor = Math.floor(daysSinceAnchor / 7)
             shouldGenerate =
-              weekNumber % 2 === 0 && (template.daysOfWeek?.includes(dayOfWeek) ?? false)
+              weeksSinceAnchor % 2 === 0 && (template.daysOfWeek?.includes(dayOfWeek) ?? false)
             break
           case "monthly":
-            // Monthly on specific day of month
-            shouldGenerate = current.getDate() === 1 // First of month
+            // Monthly on configurable day of month (defaults to 1st)
+            const targetDay = template.dayOfMonth ?? 1
+            // Handle months with fewer days (e.g., Feb 30 -> Feb 28)
+            const lastDayOfMonth = new Date(
+              current.getFullYear(),
+              current.getMonth() + 1,
+              0
+            ).getDate()
+            const effectiveDay = Math.min(targetDay, lastDayOfMonth)
+            shouldGenerate = current.getDate() === effectiveDay
             break
         }
 
@@ -198,7 +215,9 @@ export const useTasksStore = create<TasksState>((set, get) => ({
           durationEstimate: template.durationEstimate,
           recurrenceTemplateId: template.id,
           weeklyGoalId: template.linkedGoalId,
+          minimumVersion: template.minimumVersion,
           status: "pending",
+          deferCount: 0,
         })
       }
     }

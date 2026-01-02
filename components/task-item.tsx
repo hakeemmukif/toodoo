@@ -4,12 +4,14 @@ import { useState } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { AspectBadge } from "@/components/aspect-badge"
+import { ResistanceIndicator } from "@/components/resistance-indicator"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { Task } from "@/lib/types"
 import { X, Calendar as CalendarIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTasksStore } from "@/stores/tasks"
+import { useAppStore } from "@/stores/app"
 import { formatDate } from "@/db"
 
 interface TaskItemProps {
@@ -23,6 +25,7 @@ export function TaskItem({ task, showDate = false }: TaskItemProps) {
   const skipTask = useTasksStore((state) => state.skipTask)
   const deferTask = useTasksStore((state) => state.deferTask)
   const updateTask = useTasksStore((state) => state.updateTask)
+  const coachTone = useAppStore((state) => state.settings?.coachTone ?? "balanced")
 
   const handleComplete = async () => {
     if (task.status === "done") {
@@ -64,9 +67,12 @@ export function TaskItem({ task, showDate = false }: TaskItemProps) {
 
       <div className="flex-1 space-y-1.5">
         <div className="flex items-start justify-between gap-2">
-          <h4 className={cn("font-serif text-base leading-snug", task.status === "done" && "line-through opacity-60")}>
-            {task.title}
-          </h4>
+          <div className="flex items-center gap-2">
+            <h4 className={cn("font-serif text-base leading-snug", task.status === "done" && "line-through opacity-60")}>
+              {task.title}
+            </h4>
+            <ResistanceIndicator task={task} coachTone={coachTone} size="sm" />
+          </div>
           <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
             <Button
               variant="ghost"
@@ -117,6 +123,12 @@ export function TaskItem({ task, showDate = false }: TaskItemProps) {
             <>
               <span>-</span>
               <span className="text-yellow-600">Skipped</span>
+            </>
+          )}
+          {task.minimumVersion && task.status === "pending" && (
+            <>
+              <span>-</span>
+              <span className="text-blue-600">Fallback: {task.minimumVersion}</span>
             </>
           )}
         </div>
