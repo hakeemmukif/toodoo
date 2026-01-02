@@ -13,6 +13,10 @@ import type {
   ShoppingItem,
   ScheduleBlock,
   AppSettings,
+  InboxItem,
+  WeeklyReview,
+  FinancialSnapshot,
+  StreakData,
 } from "@/lib/types"
 
 class LifeTrackerDB extends Dexie {
@@ -29,10 +33,15 @@ class LifeTrackerDB extends Dexie {
   shoppingItems!: Table<ShoppingItem>
   scheduleBlocks!: Table<ScheduleBlock>
   appSettings!: Table<AppSettings>
+  inboxItems!: Table<InboxItem>
+  weeklyReviews!: Table<WeeklyReview>
+  financialSnapshots!: Table<FinancialSnapshot>
+  streakData!: Table<StreakData>
 
   constructor() {
     super("LifeTrackerDB")
 
+    // Version 1: Original schema
     this.version(1).stores({
       yearlyGoals: "id, aspect, year, status",
       monthlyGoals: "id, yearlyGoalId, aspect, month, status",
@@ -48,6 +57,34 @@ class LifeTrackerDB extends Dexie {
       scheduleBlocks: "id, date, type, linkedTaskId",
       appSettings: "id",
     })
+
+    // Version 2: Behavioral framework additions
+    this.version(2).stores({
+      yearlyGoals: "id, aspect, year, status, priority",
+      monthlyGoals: "id, yearlyGoalId, aspect, month, status, priority",
+      weeklyGoals: "id, monthlyGoalId, aspect, week, status",
+      tasks: "id, weeklyGoalId, aspect, scheduledDate, status, recurrenceTemplateId, deferCount",
+      recurrenceTemplates: "id, aspect, isActive",
+      journalEntries: "id, timestamp, *detectedAspects, goalAlignment, promptCategory, energyLevel",
+      trainingSessions: "id, date, type, isHardThing",
+      meals: "id, date, type, recipeId, cooked",
+      recipes: "id, *tags, rating",
+      shoppingLists: "id, store",
+      shoppingItems: "id, listId, category, status, priority",
+      scheduleBlocks: "id, date, type, depth, linkedTaskId",
+      appSettings: "id",
+      inboxItems: "id, capturedAt, processedAt",
+      weeklyReviews: "id, weekOf, completedAt",
+      financialSnapshots: "id, date, linkedGoalId, onTrack",
+      streakData: "type",
+    }).upgrade((tx) => {
+      // Migrate existing tasks to have deferCount = 0
+      return tx.table("tasks").toCollection().modify((task) => {
+        if (task.deferCount === undefined) {
+          task.deferCount = 0
+        }
+      })
+    })
   }
 }
 
@@ -62,9 +99,46 @@ export async function initializeDb() {
       ollamaUrl: "http://localhost:11434",
       theme: "dark",
       onboardingCompleted: false,
+      weekStartsOn: 1, // Monday
+      weeklyReviewDay: 0, // Sunday
+      weeklyReviewTime: "18:00",
+      journalPromptMode: "rotating",
+      preferredPromptCategories: [],
+      coachTone: "balanced",
+      deepWorkDailyTarget: 4,
+      showPrincipleTooltips: true,
       createdAt: new Date(),
       updatedAt: new Date(),
     })
+  } else {
+    // Migrate existing settings to include new fields
+    const updates: Partial<AppSettings> = {}
+    if (settings.weekStartsOn === undefined) updates.weekStartsOn = 1
+    if (settings.weeklyReviewDay === undefined) updates.weeklyReviewDay = 0
+    if (settings.weeklyReviewTime === undefined) updates.weeklyReviewTime = "18:00"
+    if (settings.journalPromptMode === undefined) updates.journalPromptMode = "rotating"
+    if (settings.preferredPromptCategories === undefined) updates.preferredPromptCategories = []
+    if (settings.coachTone === undefined) updates.coachTone = "balanced"
+    if (settings.deepWorkDailyTarget === undefined) updates.deepWorkDailyTarget = 4
+    if (settings.showPrincipleTooltips === undefined) updates.showPrincipleTooltips = true
+
+    if (Object.keys(updates).length > 0) {
+      await db.appSettings.update("default", { ...updates, updatedAt: new Date() })
+    }
+  }
+
+  // Initialize default streak data if not exists
+  const streakTypes = ["training", "cooking", "journal", "deep-work"] as const
+  for (const type of streakTypes) {
+    const existing = await db.streakData.get(type)
+    if (!existing) {
+      await db.streakData.add({
+        type,
+        current: 0,
+        longest: 0,
+        daysSinceDoubleMiss: 0,
+      })
+    }
   }
 }
 
@@ -79,11 +153,27 @@ export function formatDate(date: Date): string {
 }
 
 export function getWeekString(date: Date): string {
-  const year = date.getFullYear()
-  const startOfYear = new Date(year, 0, 1)
-  const days = Math.floor((date.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000))
-  const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7)
-  return `${year}-W${weekNumber.toString().padStart(2, "0")}`
+  // ISO 8601 week number calculation
+  // Week 1 is the week containing the first Thursday of the year
+  const target = new Date(date.valueOf())
+  // Set to nearest Thursday: current date + 4 - current day number (makes Sunday = 7)
+  const dayNum = (date.getDay() + 6) % 7 // Monday = 0, Sunday = 6
+  target.setDate(target.getDate() - dayNum + 3) // Set to Thursday of current week
+
+  // Get first Thursday of year
+  const firstThursday = new Date(target.getFullYear(), 0, 4)
+  const firstThursdayDay = (firstThursday.getDay() + 6) % 7
+  firstThursday.setDate(firstThursday.getDate() - firstThursdayDay + 3)
+
+  // Calculate week number
+  const weekNum = 1 + Math.round(
+    (target.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)
+  )
+
+  // ISO week year might differ from calendar year at year boundaries
+  const isoYear = target.getFullYear()
+
+  return `${isoYear}-W${weekNum.toString().padStart(2, "0")}`
 }
 
 export function getMonthString(date: Date): string {

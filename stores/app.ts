@@ -1,16 +1,18 @@
 import { create } from "zustand"
-import { db, initializeDb } from "@/db"
+import { db, initializeDb, generateId } from "@/db"
 import type { AppSettings, ScheduleBlock } from "@/lib/types"
 
 interface AppState {
   settings: AppSettings | null
   scheduleBlocks: ScheduleBlock[]
   isInitialized: boolean
+  isDataLoaded: boolean // Tracks if ALL stores have been loaded
   isLoading: boolean
   error: string | null
 
   // Initialization
   initialize: () => Promise<void>
+  setDataLoaded: () => void
 
   // Settings
   loadSettings: () => Promise<void>
@@ -18,7 +20,7 @@ interface AppState {
 
   // Schedule Blocks
   loadScheduleBlocks: () => Promise<void>
-  addScheduleBlock: (block: Omit<ScheduleBlock, "id" | "createdAt">) => Promise<string>
+  addScheduleBlock: (block: Omit<ScheduleBlock, "id" | "createdAt" | "updatedAt">) => Promise<string>
   updateScheduleBlock: (id: string, updates: Partial<ScheduleBlock>) => Promise<void>
   deleteScheduleBlock: (id: string) => Promise<void>
 
@@ -32,6 +34,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   settings: null,
   scheduleBlocks: [],
   isInitialized: false,
+  isDataLoaded: false,
   isLoading: false,
   error: null,
 
@@ -46,6 +49,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) {
       set({ error: "Failed to initialize app", isLoading: false })
     }
+  },
+
+  setDataLoaded: () => {
+    set({ isDataLoaded: true })
   },
 
   loadSettings: async () => {
@@ -81,11 +88,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   addScheduleBlock: async (blockData) => {
-    const id = crypto.randomUUID()
+    const id = generateId()
     const block: ScheduleBlock = {
       ...blockData,
       id,
       createdAt: new Date(),
+      updatedAt: new Date(),
     }
     await db.scheduleBlocks.add(block)
     set((state) => ({ scheduleBlocks: [...state.scheduleBlocks, block] }))
@@ -93,10 +101,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   updateScheduleBlock: async (id, updates) => {
-    await db.scheduleBlocks.update(id, updates)
+    const updatedData = { ...updates, updatedAt: new Date() }
+    await db.scheduleBlocks.update(id, updatedData)
     set((state) => ({
       scheduleBlocks: state.scheduleBlocks.map((b) =>
-        b.id === id ? { ...b, ...updates } : b
+        b.id === id ? { ...b, ...updatedData } : b
       ),
     }))
   },
@@ -110,7 +119,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   exportData: async () => {
     const data = {
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       yearlyGoals: await db.yearlyGoals.toArray(),
       monthlyGoals: await db.monthlyGoals.toArray(),
@@ -124,6 +133,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       shoppingLists: await db.shoppingLists.toArray(),
       shoppingItems: await db.shoppingItems.toArray(),
       scheduleBlocks: await db.scheduleBlocks.toArray(),
+      inboxItems: await db.inboxItems.toArray(),
+      weeklyReviews: await db.weeklyReviews.toArray(),
+      financialSnapshots: await db.financialSnapshots.toArray(),
+      streakData: await db.streakData.toArray(),
       settings: await db.appSettings.get("default"),
     }
     return JSON.stringify(data, null, 2)
@@ -151,6 +164,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (data.shoppingLists?.length) await db.shoppingLists.bulkAdd(data.shoppingLists)
       if (data.shoppingItems?.length) await db.shoppingItems.bulkAdd(data.shoppingItems)
       if (data.scheduleBlocks?.length) await db.scheduleBlocks.bulkAdd(data.scheduleBlocks)
+      if (data.inboxItems?.length) await db.inboxItems.bulkAdd(data.inboxItems)
+      if (data.weeklyReviews?.length) await db.weeklyReviews.bulkAdd(data.weeklyReviews)
+      if (data.financialSnapshots?.length)
+        await db.financialSnapshots.bulkAdd(data.financialSnapshots)
+      if (data.streakData?.length) await db.streakData.bulkAdd(data.streakData)
       if (data.settings) {
         await db.appSettings.put({ ...data.settings, id: "default" })
       }
@@ -176,6 +194,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       db.shoppingLists.clear(),
       db.shoppingItems.clear(),
       db.scheduleBlocks.clear(),
+      db.inboxItems.clear(),
+      db.weeklyReviews.clear(),
+      db.financialSnapshots.clear(),
+      db.streakData.clear(),
     ])
 
     // Reset settings but keep the default structure

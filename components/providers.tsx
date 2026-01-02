@@ -1,8 +1,9 @@
 "use client"
 
 import type React from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useInitializeData } from "@/hooks/use-data"
+import { useAppStore } from "@/stores/app"
 
 interface ProvidersProps {
   children: React.ReactNode
@@ -11,6 +12,8 @@ interface ProvidersProps {
 export function DataProvider({ children }: ProvidersProps) {
   const { isLoading, error } = useInitializeData()
   const [mounted, setMounted] = useState(false)
+  const isDataLoaded = useAppStore((state) => state.isDataLoaded)
+  const hasShownLoading = useRef(false)
 
   useEffect(() => {
     setMounted(true)
@@ -18,10 +21,15 @@ export function DataProvider({ children }: ProvidersProps) {
 
   // Don't render anything on server to avoid hydration issues with IndexedDB
   if (!mounted) {
-    return null
+    // Return a minimal placeholder to prevent layout shift
+    return (
+      <div className="min-h-screen bg-background" />
+    )
   }
 
-  if (isLoading) {
+  // Only show loading spinner on first load, not on navigations
+  if (isLoading && !isDataLoaded && !hasShownLoading.current) {
+    hasShownLoading.current = true
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">

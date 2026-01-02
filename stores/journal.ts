@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { db, generateId } from "@/db"
-import type { JournalEntry, LifeAspect, GoalAlignment } from "@/lib/types"
+import type { JournalEntry, LifeAspect, GoalAlignment, PromptCategory } from "@/lib/types"
 import { analyzeSentiment, detectAspects, determineGoalAlignment } from "@/services/analysis"
 
 interface JournalState {
@@ -10,7 +10,14 @@ interface JournalState {
 
   // Actions
   loadEntries: () => Promise<void>
-  addEntry: (content: string) => Promise<string>
+  addEntry: (
+    content: string,
+    promptUsed?: string,
+    promptCategory?: PromptCategory,
+    energyLevel?: number,
+    sleepQuality?: number,
+    sleepHours?: number
+  ) => Promise<string>
   updateEntry: (id: string, content: string) => Promise<void>
   deleteEntry: (id: string) => Promise<void>
   analyzeWithLLM: (id: string) => Promise<void>
@@ -36,7 +43,7 @@ export const useJournalStore = create<JournalState>((set, get) => ({
     }
   },
 
-  addEntry: async (content) => {
+  addEntry: async (content, promptUsed, promptCategory, energyLevel, sleepQuality, sleepHours) => {
     const id = generateId()
     const timestamp = new Date()
 
@@ -52,6 +59,11 @@ export const useJournalStore = create<JournalState>((set, get) => ({
       detectedAspects,
       sentimentScore,
       goalAlignment,
+      promptUsed,
+      promptCategory,
+      energyLevel,
+      sleepQuality,
+      sleepHours,
       createdAt: timestamp,
       updatedAt: timestamp,
     }

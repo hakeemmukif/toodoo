@@ -22,6 +22,7 @@ import { format } from "date-fns"
 
 const trainingTypes: { value: TrainingType; label: string }[] = [
   { value: "muay-thai", label: "Muay Thai" },
+  { value: "dj-practice", label: "DJ Practice" },
   { value: "cardio", label: "Cardio" },
   { value: "strength", label: "Strength" },
   { value: "flexibility", label: "Flexibility" },

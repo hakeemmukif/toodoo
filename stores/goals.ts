@@ -154,6 +154,8 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
 
   deleteWeeklyGoal: async (id) => {
     await db.weeklyGoals.delete(id)
+    // Nullify weeklyGoalId on orphaned tasks (preserves tasks but removes link)
+    await db.tasks.where("weeklyGoalId").equals(id).modify({ weeklyGoalId: undefined })
     set((state) => ({
       weeklyGoals: state.weeklyGoals.filter((g) => g.id !== id),
     }))

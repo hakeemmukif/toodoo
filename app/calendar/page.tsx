@@ -24,11 +24,10 @@ export default function CalendarPage() {
   // Helper to get days in current view
   const getDaysInView = () => {
     if (view === "week") {
-      const start = new Date(currentDate)
-      start.setDate(start.getDate() - start.getDay())
+      // Show 7 days starting from currentDate (today by default)
       return Array.from({ length: 7 }, (_, i) => {
-        const date = new Date(start)
-        date.setDate(start.getDate() + i)
+        const date = new Date(currentDate)
+        date.setDate(currentDate.getDate() + i)
         return date
       })
     } else {

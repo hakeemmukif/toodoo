@@ -9,7 +9,7 @@ interface TrainingState {
 
   // Actions
   loadSessions: () => Promise<void>
-  addSession: (session: Omit<TrainingSession, "id" | "createdAt">) => Promise<string>
+  addSession: (session: Omit<TrainingSession, "id" | "createdAt" | "updatedAt">) => Promise<string>
   updateSession: (id: string, updates: Partial<TrainingSession>) => Promise<void>
   deleteSession: (id: string) => Promise<void>
 
@@ -48,6 +48,7 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
       ...sessionData,
       id,
       createdAt: new Date(),
+      updatedAt: new Date(),
     }
     await db.trainingSessions.add(session)
     set((state) => ({ sessions: [session, ...state.sessions] }))
@@ -55,9 +56,10 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
   },
 
   updateSession: async (id, updates) => {
-    await db.trainingSessions.update(id, updates)
+    const updatedData = { ...updates, updatedAt: new Date() }
+    await db.trainingSessions.update(id, updatedData)
     set((state) => ({
-      sessions: state.sessions.map((s) => (s.id === id ? { ...s, ...updates } : s)),
+      sessions: state.sessions.map((s) => (s.id === id ? { ...s, ...updatedData } : s)),
     }))
   },
 
