@@ -96,7 +96,7 @@ export default function MealsPage() {
     if (recipeId) {
       const recipe = recipes.find((r) => r.id === recipeId)
       if (recipe) {
-        setDescription(recipe.name)
+        setDescription(recipe.title)
         setCooked(true)
       }
     }
@@ -205,7 +205,7 @@ export default function MealsPage() {
                     <SelectItem value="">No recipe</SelectItem>
                     {recipes.map((recipe) => (
                       <SelectItem key={recipe.id} value={recipe.id}>
-                        {recipe.name}
+                        {recipe.title}
                       </SelectItem>
                     ))}
                   </SelectContent>

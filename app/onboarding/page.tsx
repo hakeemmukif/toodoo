@@ -82,7 +82,6 @@ export default function OnboardingPage() {
           description: data.criteria,
           successCriteria: data.criteria,
           status: "active",
-          progress: 0,
         })
       }
 

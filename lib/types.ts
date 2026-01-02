@@ -259,6 +259,7 @@ export interface MonthlySummary {
 export interface AppSettings {
   id: string
   ollamaUrl: string
+  ollamaModel?: string
   theme: "light" | "dark" | "system"
   onboardingCompleted: boolean
   createdAt: Date
