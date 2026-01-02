@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+/.pnp
+.pnp.js
 
 # next.js
 /.next/
@@ -9,6 +11,7 @@
 
 # production
 /build
+/dist
 
 # debug
 npm-debug.log*
@@ -16,8 +19,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files
-.env*
+# env files (NEVER commit secrets)
+.env
+.env.*
+!.env.example
 
 # vercel
 .vercel
@@ -25,3 +30,39 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# testing
+/coverage
+.nyc_output
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# misc caches
+.eslintcache
+.cache
+*.cache
+
+# local overrides
+*.local
+
+# lock files (using npm, ignore others)
+pnpm-lock.yaml
+yarn.lock
+bun.lockb
