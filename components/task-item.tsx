@@ -7,8 +7,15 @@ import { AspectBadge } from "@/components/aspect-badge"
 import { ResistanceIndicator } from "@/components/resistance-indicator"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import type { Task } from "@/lib/types"
-import { X, Calendar as CalendarIcon } from "lucide-react"
+import { MoreHorizontal, Calendar as CalendarIcon, Trash2, SkipForward } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTasksStore } from "@/stores/tasks"
 import { useAppStore } from "@/stores/app"
@@ -25,6 +32,7 @@ export function TaskItem({ task, showDate = false }: TaskItemProps) {
   const skipTask = useTasksStore((state) => state.skipTask)
   const deferTask = useTasksStore((state) => state.deferTask)
   const updateTask = useTasksStore((state) => state.updateTask)
+  const deleteTask = useTasksStore((state) => state.deleteTask)
   const coachTone = useAppStore((state) => state.settings?.coachTone ?? "balanced")
 
   const handleComplete = async () => {
@@ -47,7 +55,35 @@ export function TaskItem({ task, showDate = false }: TaskItemProps) {
     }
   }
 
+  const handleDelete = async () => {
+    await deleteTask(task.id)
+  }
+
   const duration = task.durationEstimate || 30
+
+  // Format time for display (e.g., "19:00" -> "7:00 PM")
+  const formatTime = (time: string): string => {
+    const [hours, minutes] = time.split(":").map(Number)
+    const period = hours >= 12 ? "PM" : "AM"
+    const displayHours = hours % 12 || 12
+    return minutes > 0
+      ? `${displayHours}:${String(minutes).padStart(2, "0")} ${period}`
+      : `${displayHours} ${period}`
+  }
+
+  // Calculate end time from start time + duration
+  const getEndTime = (startTime: string, durationMins: number): string => {
+    const [hours, minutes] = startTime.split(":").map(Number)
+    const totalMinutes = hours * 60 + minutes + durationMins
+    const endHours = Math.floor(totalMinutes / 60) % 24
+    const endMinutes = totalMinutes % 60
+    return `${String(endHours).padStart(2, "0")}:${String(endMinutes).padStart(2, "0")}`
+  }
+
+  // Show hard scheduled time if available, otherwise time preference
+  const timeDisplay = task.hardScheduledTime
+    ? `${formatTime(task.hardScheduledTime)} - ${formatTime(getEndTime(task.hardScheduledTime, duration))}`
+    : task.timePreference.charAt(0).toUpperCase() + task.timePreference.slice(1)
 
   return (
     <div
@@ -73,38 +109,52 @@ export function TaskItem({ task, showDate = false }: TaskItemProps) {
             </h4>
             <ResistanceIndicator task={task} coachTone={coachTone} size="sm" />
           </div>
-          <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={handleSkip}
-              disabled={task.status !== "pending"}
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
-            <Popover open={deferOpen} onOpenChange={setDeferOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  disabled={task.status !== "pending"}
-                >
-                  <CalendarIcon className="h-3.5 w-3.5" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <Calendar
-                  mode="single"
-                  selected={new Date(task.scheduledDate)}
-                  onSelect={handleDefer}
-                  disabled={(date) => date < new Date()}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {task.status === "pending" && (
+                <>
+                  <DropdownMenuItem onClick={handleSkip}>
+                    <SkipForward className="mr-2 h-4 w-4" />
+                    Skip
+                  </DropdownMenuItem>
+                  <Popover open={deferOpen} onOpenChange={setDeferOpen}>
+                    <PopoverTrigger asChild>
+                      <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        Defer
+                      </DropdownMenuItem>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="end" side="left">
+                      <Calendar
+                        mode="single"
+                        selected={new Date(task.scheduledDate)}
+                        onSelect={handleDefer}
+                        disabled={(date) => date < new Date()}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              <DropdownMenuItem
+                onClick={handleDelete}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <div className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
@@ -112,7 +162,7 @@ export function TaskItem({ task, showDate = false }: TaskItemProps) {
           <span>-</span>
           <span>{duration}min</span>
           <span>-</span>
-          <span className="capitalize">{task.timePreference}</span>
+          <span>{timeDisplay}</span>
           {showDate && (
             <>
               <span>-</span>

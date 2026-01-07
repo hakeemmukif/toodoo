@@ -104,14 +104,14 @@ export default function JournalPage() {
   const handleAddEntry = async () => {
     if (!formContent.trim()) return
 
-    await addEntry(
-      formContent,
-      currentPrompt?.id,
-      currentPrompt?.category,
-      energyLevel ? parseInt(energyLevel) : undefined,
-      sleepQuality ? parseInt(sleepQuality) : undefined,
-      sleepHours ? parseFloat(sleepHours) : undefined
-    )
+    await addEntry({
+      content: formContent,
+      promptUsed: currentPrompt?.id,
+      promptCategory: currentPrompt?.category,
+      energyLevel: energyLevel ? parseInt(energyLevel) : undefined,
+      sleepQuality: sleepQuality ? parseInt(sleepQuality) : undefined,
+      sleepHours: sleepHours ? parseFloat(sleepHours) : undefined,
+    })
 
     // Reset form
     setFormContent("")

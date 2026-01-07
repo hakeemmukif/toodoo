@@ -1,6 +1,13 @@
 import { create } from "zustand"
 import { db, generateId, formatDate } from "@/db"
-import type { TrainingSession, TrainingType } from "@/lib/types"
+import type { TrainingSession, TrainingType, YearlyGoal } from "@/lib/types"
+
+interface GoalContribution {
+  sessions: number
+  totalMinutes: number
+  avgIntensity: number
+  recentSessions: TrainingSession[]
+}
 
 interface TrainingState {
   sessions: TrainingSession[]
@@ -25,6 +32,13 @@ interface TrainingState {
     thisWeekSessions: number
     thisWeekMinutes: number
   }
+
+  // Goal integration
+  getSessionsForGoal: (goalId: string) => TrainingSession[]
+  calculateGoalContribution: (goalId: string) => GoalContribution
+  getSuggestedGoalsForSession: (type: TrainingType) => Promise<YearlyGoal[]>
+  linkSessionToGoal: (sessionId: string, goalId: string) => Promise<void>
+  unlinkSessionFromGoal: (sessionId: string) => Promise<void>
 }
 
 export const useTrainingStore = create<TrainingState>((set, get) => ({
@@ -152,5 +166,67 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
       thisWeekSessions: thisWeekSessions.length,
       thisWeekMinutes: thisWeekSessions.reduce((sum, s) => sum + s.duration, 0),
     }
+  },
+
+  // Goal integration methods
+  getSessionsForGoal: (goalId) => {
+    return get().sessions.filter((s) => s.linkedGoalId === goalId)
+  },
+
+  calculateGoalContribution: (goalId) => {
+    const sessions = get().getSessionsForGoal(goalId)
+    const totalMinutes = sessions.reduce((sum, s) => sum + s.duration, 0)
+    const avgIntensity =
+      sessions.length > 0
+        ? sessions.reduce((sum, s) => sum + s.intensity, 0) / sessions.length
+        : 0
+
+    // Get 5 most recent sessions
+    const recentSessions = [...sessions]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 5)
+
+    return {
+      sessions: sessions.length,
+      totalMinutes,
+      avgIntensity: Math.round(avgIntensity * 10) / 10,
+      recentSessions,
+    }
+  },
+
+  getSuggestedGoalsForSession: async (type) => {
+    // Get active fitness or side-projects goals based on training type
+    const relevantAspects = type === "dj-practice" ? ["side-projects"] : ["fitness"]
+
+    const goals = await db.yearlyGoals
+      .where("status")
+      .equals("active")
+      .toArray()
+
+    return goals.filter((g) => relevantAspects.includes(g.aspect))
+  },
+
+  linkSessionToGoal: async (sessionId, goalId) => {
+    await db.trainingSessions.update(sessionId, {
+      linkedGoalId: goalId,
+      updatedAt: new Date(),
+    })
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId ? { ...s, linkedGoalId: goalId, updatedAt: new Date() } : s
+      ),
+    }))
+  },
+
+  unlinkSessionFromGoal: async (sessionId) => {
+    await db.trainingSessions.update(sessionId, {
+      linkedGoalId: undefined,
+      updatedAt: new Date(),
+    })
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId ? { ...s, linkedGoalId: undefined, updatedAt: new Date() } : s
+      ),
+    }))
   },
 }))

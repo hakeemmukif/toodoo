@@ -154,12 +154,12 @@ export default function FinancialPage() {
                 {financialGoals.length > 0 && (
                   <div className="space-y-2">
                     <Label>Link to Goal (optional)</Label>
-                    <Select value={linkedGoalId} onValueChange={setLinkedGoalId}>
+                    <Select value={linkedGoalId || "none"} onValueChange={(v) => setLinkedGoalId(v === "none" ? "" : v)}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a financial goal..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">No linked goal</SelectItem>
+                        <SelectItem value="none">No linked goal</SelectItem>
                         {financialGoals.map((goal) => (
                           <SelectItem key={goal.id} value={goal.id}>
                             {goal.title}

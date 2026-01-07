@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { AppLayout } from "@/components/app-layout"
 import { EmptyState } from "@/components/empty-state"
 import { Button } from "@/components/ui/button"
@@ -14,8 +14,8 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useTrainingStore } from "@/stores/training"
 import { formatDate } from "@/db"
-import type { TrainingType } from "@/lib/types"
-import { Dumbbell, Flame, Clock, TrendingUp, CalendarIcon, Trash2 } from "lucide-react"
+import type { TrainingType, YearlyGoal } from "@/lib/types"
+import { Dumbbell, Flame, Clock, TrendingUp, CalendarIcon, Trash2, Target } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
@@ -36,12 +36,20 @@ export default function TrainingPage() {
   const [notes, setNotes] = useState("")
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [datePickerOpen, setDatePickerOpen] = useState(false)
+  const [selectedGoalId, setSelectedGoalId] = useState<string>("")
+  const [suggestedGoals, setSuggestedGoals] = useState<YearlyGoal[]>([])
 
   const sessions = useTrainingStore((state) => state.sessions)
   const addSession = useTrainingStore((state) => state.addSession)
   const deleteSession = useTrainingStore((state) => state.deleteSession)
   const calculateStreak = useTrainingStore((state) => state.calculateStreak)
   const getSessionsForWeek = useTrainingStore((state) => state.getSessionsForWeek)
+  const getSuggestedGoalsForSession = useTrainingStore((state) => state.getSuggestedGoalsForSession)
+
+  // Load suggested goals when training type changes
+  useEffect(() => {
+    getSuggestedGoalsForSession(type).then(setSuggestedGoals)
+  }, [type, getSuggestedGoalsForSession])
 
   const { toast } = useToast()
 
@@ -78,6 +86,7 @@ export default function TrainingPage() {
       duration: parseInt(duration),
       intensity: intensity[0],
       notes: notes || undefined,
+      linkedGoalId: selectedGoalId || undefined,
     })
 
     // Reset form
@@ -85,10 +94,14 @@ export default function TrainingPage() {
     setIntensity([7])
     setNotes("")
     setSelectedDate(new Date())
+    setSelectedGoalId("")
 
+    const goalName = suggestedGoals.find((g) => g.id === selectedGoalId)?.title
     toast({
       title: "Session logged",
-      description: "Your training session has been saved.",
+      description: goalName
+        ? `Linked to goal: ${goalName}`
+        : "Your training session has been saved.",
     })
   }
 
@@ -173,6 +186,27 @@ export default function TrainingPage() {
               </div>
               <Slider value={intensity} onValueChange={setIntensity} min={1} max={10} step={1} />
             </div>
+            {suggestedGoals.length > 0 && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Target className="h-4 w-4" />
+                  Link to Goal (optional)
+                </Label>
+                <Select value={selectedGoalId || "none"} onValueChange={(v) => setSelectedGoalId(v === "none" ? "" : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a goal to track progress" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No goal</SelectItem>
+                    {suggestedGoals.map((goal) => (
+                      <SelectItem key={goal.id} value={goal.id}>
+                        {goal.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="notes">Notes (optional)</Label>
               <Textarea

@@ -4,6 +4,7 @@ import { AppLayout } from "@/components/app-layout"
 import { TaskItem } from "@/components/task-item"
 import { ProgressRing } from "@/components/progress-ring"
 import { SentimentDot } from "@/components/sentiment-dot"
+import { OllamaStatusIndicator } from "@/components/inbox/ollama-status"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ASPECT_CONFIG } from "@/lib/constants"
 import { useTasksStore } from "@/stores/tasks"
@@ -101,9 +102,12 @@ export default function DashboardPage() {
     <AppLayout>
       <div className="container max-w-6xl space-y-6 p-4 md:p-6 lg:p-8">
         {/* Header */}
-        <div>
-          <h1 className="text-balance text-3xl font-bold tracking-tight md:text-4xl">{greeting}</h1>
-          <p className="text-muted-foreground">{dateStr}</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-balance text-3xl font-bold tracking-tight md:text-4xl">{greeting}</h1>
+            <p className="text-muted-foreground">{dateStr}</p>
+          </div>
+          <OllamaStatusIndicator variant="indicator" showReconnect={false} />
         </div>
 
         {/* Today's Tasks */}

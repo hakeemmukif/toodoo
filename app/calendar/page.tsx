@@ -12,6 +12,16 @@ import { useJournalStore } from "@/stores/journal"
 import { formatDate } from "@/db"
 import { ChevronLeft, ChevronRight, Dumbbell, Utensils, BookOpen, ListTodo } from "lucide-react"
 
+// Format time for display (e.g., "19:00" -> "7pm")
+function formatTime(time: string): string {
+  const [hours, minutes] = time.split(":").map(Number)
+  const period = hours >= 12 ? "pm" : "am"
+  const displayHours = hours % 12 || 12
+  return minutes > 0
+    ? `${displayHours}:${String(minutes).padStart(2, "0")}${period}`
+    : `${displayHours}${period}`
+}
+
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [view, setView] = useState<"week" | "month">("week")
@@ -194,7 +204,9 @@ export default function CalendarPage() {
                         >
                           <div className="font-medium">{task.title}</div>
                           <div className="text-muted-foreground">
-                            {task.timePreference} - {task.durationEstimate || 30}m
+                            {task.hardScheduledTime
+                              ? formatTime(task.hardScheduledTime)
+                              : task.timePreference} - {task.durationEstimate || 30}m
                           </div>
                         </div>
                       ))}

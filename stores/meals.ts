@@ -1,6 +1,14 @@
 import { create } from "zustand"
 import { db, generateId, formatDate } from "@/db"
-import type { Meal, MealType } from "@/lib/types"
+import type { Meal, MealType, YearlyGoal } from "@/lib/types"
+
+interface GoalCookingProgress {
+  totalMeals: number
+  cookedMeals: number
+  orderedMeals: number
+  cookingPercentage: number
+  recentMeals: Meal[]
+}
 
 interface MealsState {
   meals: Meal[]
@@ -23,6 +31,13 @@ interface MealsState {
     cookingRatio: number
     cookingStreak: number
   }
+
+  // Goal integration
+  getMealsForGoal: (goalId: string) => Meal[]
+  calculateCookingProgress: (goalId: string) => GoalCookingProgress
+  getSuggestedGoalsForMeal: () => Promise<YearlyGoal[]>
+  linkMealToGoal: (mealId: string, goalId: string) => Promise<void>
+  unlinkMealFromGoal: (mealId: string) => Promise<void>
 }
 
 export const useMealsStore = create<MealsState>((set, get) => ({
@@ -108,5 +123,63 @@ export const useMealsStore = create<MealsState>((set, get) => ({
       cookingRatio: meals.length > 0 ? Math.round((cookedMeals / meals.length) * 100) : 0,
       cookingStreak,
     }
+  },
+
+  // Goal integration methods
+  getMealsForGoal: (goalId) => {
+    return get().meals.filter((m) => m.linkedGoalId === goalId)
+  },
+
+  calculateCookingProgress: (goalId) => {
+    const meals = get().getMealsForGoal(goalId)
+    const cookedMeals = meals.filter((m) => m.cooked).length
+    const orderedMeals = meals.filter((m) => !m.cooked).length
+
+    // Get 5 most recent meals
+    const recentMeals = [...meals]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 5)
+
+    return {
+      totalMeals: meals.length,
+      cookedMeals,
+      orderedMeals,
+      cookingPercentage: meals.length > 0 ? Math.round((cookedMeals / meals.length) * 100) : 0,
+      recentMeals,
+    }
+  },
+
+  getSuggestedGoalsForMeal: async () => {
+    // Get active nutrition goals
+    const goals = await db.yearlyGoals
+      .where("status")
+      .equals("active")
+      .toArray()
+
+    return goals.filter((g) => g.aspect === "nutrition")
+  },
+
+  linkMealToGoal: async (mealId, goalId) => {
+    await db.meals.update(mealId, {
+      linkedGoalId: goalId,
+      updatedAt: new Date(),
+    })
+    set((state) => ({
+      meals: state.meals.map((m) =>
+        m.id === mealId ? { ...m, linkedGoalId: goalId, updatedAt: new Date() } : m
+      ),
+    }))
+  },
+
+  unlinkMealFromGoal: async (mealId) => {
+    await db.meals.update(mealId, {
+      linkedGoalId: undefined,
+      updatedAt: new Date(),
+    })
+    set((state) => ({
+      meals: state.meals.map((m) =>
+        m.id === mealId ? { ...m, linkedGoalId: undefined, updatedAt: new Date() } : m
+      ),
+    }))
   },
 }))

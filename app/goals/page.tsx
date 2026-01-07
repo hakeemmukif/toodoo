@@ -5,11 +5,12 @@ import { AppLayout } from "@/components/app-layout"
 import { GoalCard } from "@/components/goal-card"
 import { EmptyState } from "@/components/empty-state"
 import { GoalWizardModal } from "@/components/goal-wizard-modal"
+import { PlanningModal } from "@/components/goal-planning"
 import { Button } from "@/components/ui/button"
 import { ASPECT_CONFIG } from "@/lib/constants"
 import { useGoalsStore } from "@/stores/goals"
 import type { LifeAspect, YearlyGoal, MonthlyGoal, WeeklyGoal } from "@/lib/types"
-import { Target, Plus } from "lucide-react"
+import { Target, Plus, Sparkles } from "lucide-react"
 import { calculateYearlyProgress, calculateMonthlyProgress, calculateWeeklyProgress } from "@/services/progress"
 
 type GoalLevel = "yearly" | "monthly" | "weekly"
@@ -24,6 +25,7 @@ interface GoalWithProgress {
 export default function GoalsPage() {
   const [selectedAspect, setSelectedAspect] = useState<LifeAspect | "all">("all")
   const [wizardOpen, setWizardOpen] = useState(false)
+  const [planningOpen, setPlanningOpen] = useState(false)
   const [goalsWithProgress, setGoalsWithProgress] = useState<GoalWithProgress[]>([])
 
   const yearlyGoals = useGoalsStore((state) => state.yearlyGoals)
@@ -97,16 +99,29 @@ export default function GoalsPage() {
             <h1 className="text-3xl font-bold tracking-tight">Goals</h1>
             <p className="text-muted-foreground">Track your progress across all life aspects</p>
           </div>
-          <Button onClick={() => setWizardOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Goal
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setPlanningOpen(true)}>
+              <Sparkles className="mr-2 h-4 w-4" />
+              Plan with AI
+            </Button>
+            <Button onClick={() => setWizardOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Goal
+            </Button>
+          </div>
         </div>
 
         {/* Goal Wizard Modal */}
         <GoalWizardModal
           open={wizardOpen}
           onOpenChange={setWizardOpen}
+          defaultAspect={defaultAspect}
+        />
+
+        {/* AI Planning Modal */}
+        <PlanningModal
+          open={planningOpen}
+          onOpenChange={setPlanningOpen}
           defaultAspect={defaultAspect}
         />
 

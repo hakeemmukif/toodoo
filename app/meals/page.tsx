@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { AppLayout } from "@/components/app-layout"
 import { EmptyState } from "@/components/empty-state"
 import { Button } from "@/components/ui/button"
@@ -14,8 +14,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useMealsStore } from "@/stores/meals"
 import { useRecipesStore } from "@/stores/recipes"
 import { formatDate } from "@/db"
-import type { MealType } from "@/lib/types"
-import { Utensils, ChefHat, ShoppingBag, Check, Plus, CalendarIcon, Trash2 } from "lucide-react"
+import type { MealType, YearlyGoal } from "@/lib/types"
+import { Utensils, ChefHat, ShoppingBag, Check, Plus, CalendarIcon, Trash2, Target } from "lucide-react"
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
@@ -34,14 +34,22 @@ export default function MealsPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [datePickerOpen, setDatePickerOpen] = useState(false)
   const [selectedRecipeId, setSelectedRecipeId] = useState<string>("")
+  const [selectedGoalId, setSelectedGoalId] = useState<string>("")
+  const [suggestedGoals, setSuggestedGoals] = useState<YearlyGoal[]>([])
 
   const meals = useMealsStore((state) => state.meals)
   const addMeal = useMealsStore((state) => state.addMeal)
   const deleteMeal = useMealsStore((state) => state.deleteMeal)
   const getMealsForDate = useMealsStore((state) => state.getMealsForDate)
   const getCookingStats = useMealsStore((state) => state.getCookingStats)
+  const getSuggestedGoalsForMeal = useMealsStore((state) => state.getSuggestedGoalsForMeal)
 
   const recipes = useRecipesStore((state) => state.recipes)
+
+  // Load suggested nutrition goals
+  useEffect(() => {
+    getSuggestedGoalsForMeal().then(setSuggestedGoals)
+  }, [getSuggestedGoalsForMeal])
 
   const { toast } = useToast()
 
@@ -69,6 +77,7 @@ export default function MealsPage() {
       description: description.trim(),
       cooked,
       recipeId: selectedRecipeId || undefined,
+      linkedGoalId: selectedGoalId || undefined,
     })
 
     // Reset form
@@ -76,10 +85,14 @@ export default function MealsPage() {
     setCooked(true)
     setSelectedDate(new Date())
     setSelectedRecipeId("")
+    setSelectedGoalId("")
 
+    const goalName = suggestedGoals.find((g) => g.id === selectedGoalId)?.title
     toast({
       title: "Meal logged",
-      description: "Your meal has been recorded.",
+      description: goalName
+        ? `Linked to goal: ${goalName}`
+        : "Your meal has been recorded.",
     })
   }
 
@@ -197,12 +210,12 @@ export default function MealsPage() {
             {recipes.length > 0 && (
               <div className="space-y-2">
                 <Label>From Recipe (optional)</Label>
-                <Select value={selectedRecipeId} onValueChange={handleRecipeSelect}>
+                <Select value={selectedRecipeId || "none"} onValueChange={(v) => handleRecipeSelect(v === "none" ? "" : v)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select a recipe..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No recipe</SelectItem>
+                    <SelectItem value="none">No recipe</SelectItem>
                     {recipes.map((recipe) => (
                       <SelectItem key={recipe.id} value={recipe.id}>
                         {recipe.title}
@@ -228,6 +241,27 @@ export default function MealsPage() {
               </Label>
               <Switch id="cooked" checked={cooked} onCheckedChange={setCooked} />
             </div>
+            {suggestedGoals.length > 0 && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Target className="h-4 w-4" />
+                  Link to Goal (optional)
+                </Label>
+                <Select value={selectedGoalId || "none"} onValueChange={(v) => setSelectedGoalId(v === "none" ? "" : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a nutrition goal to track" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No goal</SelectItem>
+                    {suggestedGoals.map((goal) => (
+                      <SelectItem key={goal.id} value={goal.id}>
+                        {goal.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <Button className="w-full" onClick={handleLogMeal} disabled={!description.trim()}>
               <Plus className="mr-2 h-4 w-4" />
               Log Meal
