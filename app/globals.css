@@ -46,6 +46,14 @@
   --color-financial: oklch(0.65 0.09 85); /* #B8A068 warm gold */
   --color-side-projects: oklch(0.54 0.06 310); /* #8B7B8E dusty purple */
   --color-chores: oklch(0.58 0.02 50); /* #9B9590 warm gray */
+
+  /* Semantic confidence colors */
+  --confidence-high: oklch(0.72 0.19 142.5); /* green */
+  --confidence-high-bg: oklch(0.72 0.19 142.5 / 0.15);
+  --confidence-medium: oklch(0.76 0.15 55); /* amber */
+  --confidence-medium-bg: oklch(0.76 0.15 55 / 0.15);
+  --confidence-low: oklch(0.63 0.21 25); /* red */
+  --confidence-low-bg: oklch(0.63 0.21 25 / 0.15);
 }
 
 .dark {
@@ -90,6 +98,14 @@
   --color-financial: oklch(0.65 0.09 85);
   --color-side-projects: oklch(0.54 0.06 310);
   --color-chores: oklch(0.58 0.02 50);
+
+  /* Confidence colors - slightly adjusted for dark mode */
+  --confidence-high: oklch(0.72 0.19 142.5);
+  --confidence-high-bg: oklch(0.72 0.19 142.5 / 0.2);
+  --confidence-medium: oklch(0.76 0.15 55);
+  --confidence-medium-bg: oklch(0.76 0.15 55 / 0.2);
+  --confidence-low: oklch(0.63 0.21 25);
+  --confidence-low-bg: oklch(0.63 0.21 25 / 0.2);
 }
 
 @theme inline {
@@ -141,6 +157,14 @@
   --color-financial: var(--color-financial);
   --color-side-projects: var(--color-side-projects);
   --color-chores: var(--color-chores);
+
+  /* Confidence semantic colors */
+  --color-confidence-high: var(--confidence-high);
+  --color-confidence-high-bg: var(--confidence-high-bg);
+  --color-confidence-medium: var(--confidence-medium);
+  --color-confidence-medium-bg: var(--confidence-medium-bg);
+  --color-confidence-low: var(--confidence-low);
+  --color-confidence-low-bg: var(--confidence-low-bg);
 }
 
 @layer base {
@@ -152,4 +176,62 @@
     /* Subtle paper texture overlay for warmth */
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03' /%3E%3C/svg%3E");
   }
+}
+
+/* Animation keyframes */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Animation utilities */
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s ease-out forwards;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.3s ease-out forwards;
+}
+
+/* Stagger delay utilities */
+.animation-delay-100 { animation-delay: 100ms; }
+.animation-delay-200 { animation-delay: 200ms; }
+.animation-delay-300 { animation-delay: 300ms; }
+.animation-delay-400 { animation-delay: 400ms; }
+.animation-delay-500 { animation-delay: 500ms; }
+.animation-delay-600 { animation-delay: 600ms; }
+
+/* Start with opacity 0 for staggered animations */
+.animate-stagger {
+  opacity: 0;
 }

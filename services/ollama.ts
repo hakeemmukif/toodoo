@@ -71,6 +71,43 @@ export async function queryOllama(
 }
 
 /**
+ * Generate with Ollama with timeout and options support
+ * This is a convenience wrapper around queryOllama for the sync services
+ */
+export async function generateWithOllama(
+  prompt: string,
+  options: { timeout?: number; model?: string } = {}
+): Promise<string> {
+  const { timeout = 30000, model = "mistral" } = options
+  const baseUrl = await getOllamaUrl()
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeout)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        prompt,
+        stream: false,
+      }),
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      throw new Error("Failed to get response from Ollama")
+    }
+
+    const data = await response.json()
+    return data.response
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+/**
  * Analyze journal entry for goal alignment
  */
 export async function analyzeJournalEntry(
@@ -254,5 +291,68 @@ function generateRuleBasedAnalysis(type: string, data: unknown): string {
 
     default:
       return "Analysis not available. Connect to Ollama for AI-powered insights."
+  }
+}
+
+/**
+ * Lookup result for air fryer model specs
+ */
+export interface AirFryerSpecsResult {
+  found: boolean
+  reason?: string           // Why not found (when found=false)
+  model?: string
+  brand?: string
+  capacityLiters?: number
+  wattage?: number
+  features?: string[]
+  notes?: string
+}
+
+/**
+ * Look up air fryer model specs using Ollama
+ * Returns null if lookup fails or Ollama is unavailable
+ */
+export async function lookupAirFryerSpecs(
+  modelName: string
+): Promise<AirFryerSpecsResult | null> {
+  const isConnected = await checkOllamaConnection()
+  if (!isConnected) {
+    return null
+  }
+
+  // LLMs aren't reliable for product lookups - they hallucinate.
+  // Instead of trying to get specs, just help identify the brand and suggest manual entry.
+  const prompt = `Parse this air fryer model input and extract what you can identify with certainty.
+
+Input: "${modelName}"
+
+Rules:
+- Only extract information you're CERTAIN about from the input text itself
+- If the brand name is in the input (Philips, Ninja, Cosori, etc.), extract it
+- DO NOT look up or guess specifications like capacity or wattage
+- DO NOT invent model numbers - only use what's in the input
+
+Return ONLY valid JSON:
+{
+  "found": false,
+  "brand": "brand name if clearly visible in input, otherwise null",
+  "model": "model text from input, cleaned up",
+  "reason": "Please enter capacity manually - we cannot verify specs automatically"
+}`
+
+  try {
+    const response = await generateWithOllama(prompt, { timeout: 15000 })
+
+    // Parse the JSON response
+    const jsonMatch = response.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      return null
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]) as AirFryerSpecsResult
+    return parsed
+  } catch (error) {
+    console.warn("Air fryer specs lookup failed:", error)
+    return null
   }
 }

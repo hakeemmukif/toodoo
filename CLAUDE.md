@@ -43,6 +43,9 @@ User never sees "Atomic Habits", "Essentialism", "Deep Work", "Goggins", etc. Pr
 | "Deep focus: 3.2 hours" | Focus depth tracking |
 | "What's the ONE thing?" | Priority forcing |
 
+### NO CO-AUTHORED-BY IN COMMITS
+Never add "Co-Authored-By: Claude" or any AI attribution to git commits. Keep commits clean.
+
 ### Key Behavioral Thresholds
 - `deferCount >= 2`: Show resistance indicator
 - `deferCount >= 3`: Prompt for resistanceNote

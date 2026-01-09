@@ -1,13 +1,15 @@
 "use client"
 
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ASPECT_CONFIG } from "@/lib/constants"
 import { formatDate } from "@/db"
 import type { LifeAspect, TimePreference } from "@/lib/types"
-import { ArrowLeft, ArrowRight } from "lucide-react"
+import { ArrowLeft, ArrowRight, ChevronDown, Zap } from "lucide-react"
 
 interface StepTaskProps {
   aspect: LifeAspect
@@ -16,8 +18,10 @@ interface StepTaskProps {
     title: string
     scheduledDate: string
     timePreference: TimePreference
+    contextCue?: string
+    implementationPlan?: string
   }
-  onChange: (value: { title: string; scheduledDate: string; timePreference: TimePreference }) => void
+  onChange: (value: { title: string; scheduledDate: string; timePreference: TimePreference; contextCue?: string; implementationPlan?: string }) => void
   onNext: () => void
   onBack: () => void
 }
@@ -31,6 +35,7 @@ export function StepTask({
   onBack,
 }: StepTaskProps) {
   const config = ASPECT_CONFIG[aspect]
+  const [showIntention, setShowIntention] = useState(false)
   const today = new Date()
   const tomorrow = new Date(today)
   tomorrow.setDate(tomorrow.getDate() + 1)
@@ -42,6 +47,15 @@ export function StepTask({
     financial: "e.g., Set up automatic savings transfer",
     "side-projects": "e.g., Set up the project repository",
     chores: "e.g., Clean the kitchen",
+  }
+
+  const contextCueSuggestions: Record<LifeAspect, string> = {
+    fitness: "When I finish work and get home",
+    nutrition: "When it's 6pm and I'm in the kitchen",
+    career: "When I sit at my desk in the morning",
+    financial: "When I get my paycheck",
+    "side-projects": "When it's Saturday morning",
+    chores: "When I wake up on Sunday",
   }
 
   return (
@@ -123,6 +137,65 @@ export function StepTask({
           </RadioGroup>
         </div>
       </div>
+
+      {/* Implementation Intention (optional but powerful) */}
+      <Collapsible open={showIntention} onOpenChange={setShowIntention}>
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full items-center justify-between rounded-lg border border-dashed border-border p-4 text-left hover:bg-muted/50"
+          >
+            <div className="flex items-center gap-3">
+              <Zap className="h-5 w-5 text-primary" />
+              <div>
+                <p className="font-medium">Add a trigger (optional)</p>
+                <p className="text-sm text-muted-foreground">
+                  &quot;When X, I will Y&quot; triples success rates
+                </p>
+              </div>
+            </div>
+            <ChevronDown
+              className={`h-4 w-4 text-muted-foreground transition-transform ${
+                showIntention ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-4 pt-4">
+          <div className="space-y-2">
+            <Label htmlFor="context-cue" className="text-base">
+              When...
+            </Label>
+            <Input
+              id="context-cue"
+              className="h-12 text-base"
+              placeholder={contextCueSuggestions[aspect]}
+              value={value.contextCue || ""}
+              onChange={(e) => onChange({ ...value, contextCue: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="implementation" className="text-base">
+              I will...
+            </Label>
+            <Input
+              id="implementation"
+              className="h-12 text-base"
+              placeholder={value.title || "do this task"}
+              value={value.implementationPlan || ""}
+              onChange={(e) => onChange({ ...value, implementationPlan: e.target.value })}
+            />
+          </div>
+          {value.contextCue && value.implementationPlan && (
+            <div className="rounded-lg bg-primary/5 p-4">
+              <p className="text-sm font-medium">Your intention:</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                &quot;{value.contextCue}, I will {value.implementationPlan}&quot;
+              </p>
+            </div>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
 
       <div className="flex justify-between pt-4">
         <Button variant="ghost" size="lg" onClick={onBack}>

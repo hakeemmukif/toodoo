@@ -238,6 +238,25 @@ export interface YearlyGoal {
   identityStatement?: string // "Become someone who..."
   createdAt: Date
   updatedAt: Date
+
+  // Psychology-backed fields
+  goalType?: GoalType // "habit" | "mastery" | "project" | "outcome"
+
+  // Type-specific data (one will be set based on goalType)
+  habit?: HabitGoal
+  mastery?: MasteryGoal
+  project?: ProjectGoal
+  outcome?: OutcomeGoal
+
+  // WOOP data (Oettingen) - guides goal creation
+  woop?: WOOPData
+
+  // Motivation check (Self-Determination Theory)
+  motivation?: MotivationCheck
+
+  // Obstacle anticipation with if-then plans
+  anticipatedObstacles?: string[]
+  ifThenPlans?: string[] // "If [obstacle], then [response]"
 }
 
 export interface MonthlyGoal {
@@ -270,6 +289,115 @@ export interface FrequencyGoal {
   target: number // e.g., 4
   period: "day" | "week" | "month"
   action?: string // e.g., "train", "cook" (for keyword matching)
+}
+
+// ========== PSYCHOLOGY-BACKED GOAL TYPES ==========
+
+// Goal types based on psychological research
+// - Habit: Automaticity through repetition (Wendy Wood)
+// - Mastery: Growth mindset, competence development (Elliot)
+// - Project: Concrete deliverables with clear end state
+// - Outcome: Measurable result (use sparingly - often extrinsic)
+export type GoalType = "habit" | "mastery" | "project" | "outcome"
+
+// WOOP structure for goal creation (Gabriele Oettingen)
+// Wish → Outcome → Obstacle → Plan - order matters!
+export interface WOOPData {
+  wish: string                    // What do you want?
+  outcome: string                 // Best possible outcome visualization
+  obstacle: string                // Main internal obstacle
+  plan: string                    // If-then plan to overcome obstacle
+}
+
+// Motivation check (Self-Determination Theory - Deci & Ryan)
+export interface MotivationCheck {
+  whyImportant: string            // Why does this matter to you?
+  autonomyScore?: number          // 1-5: "I chose this freely"
+  competenceLink?: string         // What skill does this build?
+  relatednessLink?: string        // Who benefits from this?
+}
+
+// Enhanced Habit Goal (context-cue automaticity)
+export interface HabitGoal {
+  target: number                  // e.g., 4
+  period: "day" | "week" | "month"
+  action: string                  // e.g., "train", "cook"
+  contextCue: string              // "When I finish work..."
+  implementation: string          // "...I will go to the gym"
+  suggestedDays?: number[]        // e.g., [1, 3, 5] for Mon/Wed/Fri
+  flexibleSchedule: boolean       // Allow any days vs suggested
+  currentStreak: number
+  longestStreak: number
+}
+
+// Skill level for mastery goals
+export interface SkillLevel {
+  id: string
+  title: string                   // "Beginner", "Can do basics", etc.
+  criteria: string                // What demonstrates this level
+  order: number
+  achieved: boolean
+  achievedAt?: Date
+}
+
+// Practice entry for mastery tracking
+export interface PracticeEntry {
+  id: string
+  date: string
+  durationMinutes: number
+  notes?: string
+  skillLevelId?: string           // Which skill was practiced
+}
+
+// Mastery Goal (growth mindset, competence development)
+export interface MasteryGoal {
+  skillLevels: SkillLevel[]       // Progression stages
+  currentLevel: number            // Index of current level
+  resources?: string[]            // Learning resources
+  practiceLog?: PracticeEntry[]   // Track deliberate practice
+}
+
+// Checklist item within a milestone
+export interface ChecklistItem {
+  id: string
+  title: string
+  completed: boolean
+  completedAt?: Date
+}
+
+// Milestone for project goals
+export interface Milestone {
+  id: string
+  title: string
+  description?: string
+  order: number
+  status: "pending" | "in_progress" | "completed"
+  completedAt?: Date
+  dueDate?: string
+  checklistItems?: ChecklistItem[]
+  blockedBy?: string              // What's stopping progress?
+}
+
+// Project Goal (milestone-based)
+export interface ProjectGoal {
+  milestones: Milestone[]
+  estimatedCompletionDate?: string
+  nextAction?: string             // GTD: What's the very next action?
+}
+
+// Outcome checkpoint for tracking progress
+export interface OutcomeCheckpoint {
+  date: string
+  targetValue: number
+  actualValue?: number
+}
+
+// Outcome Goal (measurable result)
+export interface OutcomeGoal {
+  targetValue: number
+  currentValue: number
+  unit: string                    // "RM", "kg", "%"
+  checkpoints: OutcomeCheckpoint[]
 }
 
 // Goal match result from inbox parser
@@ -319,6 +447,10 @@ export interface Task {
   // WHO: Who's involved in this task
   who?: string // "solo", "coach", "team", etc.
   whoType?: "solo" | "one-on-one" | "group" | "team" // For filtering/analysis
+
+  // Implementation Intention (Gollwitzer) - "When X, I will Y"
+  contextCue?: string              // "When it's 7pm and I'm home..."
+  implementationPlan?: string      // "...I will change into gym clothes"
 }
 
 export interface RecurrenceTemplate {
@@ -432,6 +564,101 @@ export interface Recipe {
   timesCooked: number
   rating?: number
   notes?: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+// ========== INGREDIENT INVENTORY & AIR FRYER TYPES ==========
+
+// Standard unit types for ingredient measurement
+export type IngredientUnit =
+  | "g" | "kg" | "ml" | "l"
+  | "cup" | "tbsp" | "tsp"
+  | "piece" | "whole"
+  | "clove" | "slice" | "bunch"
+
+// Category for organizing pantry
+export type IngredientCategory =
+  | "protein" | "vegetable" | "fruit" | "dairy"
+  | "grain" | "spice" | "sauce" | "oil" | "other"
+
+// User's ingredient inventory item
+export interface InventoryItem {
+  id: string
+  name: string
+  normalizedName: string          // Lowercase, trimmed for matching
+  quantity: number
+  unit: IngredientUnit
+  category: IngredientCategory
+  expiresAt?: string              // Optional expiry date "2026-01-15"
+  notes?: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+// Air fryer specific settings
+export interface AirFryerSettings {
+  temperature: number             // Celsius by default
+  temperatureUnit: "C" | "F"
+  timeMinutes: number
+  shakeHalfway?: boolean          // Reminder to shake/flip
+  preheatRequired?: boolean
+}
+
+// Individual recipe step for guided cooking
+export interface RecipeStep {
+  order: number
+  instruction: string
+  durationMinutes?: number
+  airFryerSettings?: AirFryerSettings  // If settings change mid-recipe
+  tip?: string                         // Coach tip for this step
+}
+
+// Extended Recipe interface for air fryer
+export interface AirFryerRecipe extends Recipe {
+  airFryerSettings: AirFryerSettings
+  steps: RecipeStep[]
+  difficulty: "easy" | "medium" | "hard"
+  requiredIngredients: RecipeIngredient[]
+  optionalIngredients?: RecipeIngredient[]
+}
+
+// Result of matching inventory to recipes
+export interface RecipeMatch {
+  recipe: AirFryerRecipe
+  matchScore: number                    // 0-1 (percentage of ingredients available)
+  matchedIngredients: {
+    name: string
+    hasEnough: boolean
+    available: number
+    required: number
+    unit: string
+  }[]
+  missingIngredients: {
+    name: string
+    required: number
+    unit: string
+    isOptional: boolean
+  }[]
+  canMakeNow: boolean                   // All required ingredients available
+  source: "rule" | "llm"
+}
+
+// Preferences for recipe suggestions
+export interface RecipeSuggestionPreferences {
+  maxPrepTime?: number                  // Max prep time in minutes
+  maxCookTime?: number                  // Max cook time in minutes
+  servingsNeeded?: number               // Scale recipes
+  excludeIngredients?: string[]         // Allergies/preferences
+  preferredDifficulty?: "easy" | "medium" | "hard"
+}
+
+// User's air fryer device configuration
+export interface AirFryerDevice {
+  id: string
+  name?: string                         // Optional: "Philips XXL", "Ninja"
+  capacityLiters: number                // e.g., 3.5, 5.5, 7.0
+  temperatureUnit: "C" | "F"            // User's preferred display unit
   createdAt: Date
   updatedAt: Date
 }
@@ -757,4 +984,150 @@ export interface Goal {
   endDate: string
   parentId?: string
   progress: number
+}
+
+// ========== SYNC/COHERENCE TYPES ==========
+
+// Issue severity levels
+export type SyncIssueSeverity = "critical" | "warning" | "info"
+
+// Issue types for categorization
+export type SyncIssueType =
+  | "orphaned_reference"      // Link points to deleted entity
+  | "invalid_link"            // Link ID doesn't exist
+  | "missing_parent"          // Child without parent (e.g., WeeklyGoal without MonthlyGoal)
+  | "unlinked_item"           // Item could/should be linked to a goal
+  | "misaligned_task"         // Task doesn't help its linked goal (LLM)
+  | "goal_drift"              // Activity drifting from goal intent (LLM)
+  | "duplicate_suspected"     // Possible duplicate entries
+
+// Entity types that can have sync issues
+export type SyncEntityType =
+  | "task"
+  | "training"
+  | "meal"
+  | "journal"
+  | "weeklyGoal"
+  | "monthlyGoal"
+  | "scheduleBlock"
+
+// Linked entity types for reference validation
+export type SyncLinkedEntityType =
+  | "yearlyGoal"
+  | "monthlyGoal"
+  | "weeklyGoal"
+  | "task"
+  | "recurrenceTemplate"
+  | "recipe"
+  | "shoppingList"
+
+// Individual sync issue
+export interface SyncIssue {
+  id: string
+  type: SyncIssueType
+  severity: SyncIssueSeverity
+  entityType: SyncEntityType
+  entityId: string
+  entityTitle: string
+  linkedEntityType?: SyncLinkedEntityType
+  linkedEntityId?: string
+  description: string
+  suggestion?: string             // LLM-generated suggestion
+  suggestedGoalId?: string        // For smart connection suggestions
+  suggestedGoalTitle?: string
+  confidence?: number             // 0-1 for LLM suggestions
+  detectedAt: Date
+  resolvedAt?: Date
+  resolution?: "linked" | "unlinked" | "ignored" | "deleted"
+  layer: 1 | 2 | 3               // Which layer detected this
+}
+
+// Sync run result
+export interface SyncRunResult {
+  id: string
+  runType: "background" | "manual" | "realtime"
+  startedAt: Date
+  completedAt: Date
+  duration: number               // ms
+  layer1: {
+    ran: boolean
+    issuesFound: number
+    issuesFixed: number
+  }
+  layer2: {
+    ran: boolean
+    ollamaAvailable: boolean
+    suggestionsGenerated: number
+  }
+  layer3: {
+    ran: boolean
+    ollamaAvailable: boolean
+    coherenceIssues: number
+  }
+  totalIssues: number
+  newIssues: number
+  resolvedIssues: number
+}
+
+// Sync settings
+export interface SyncSettings {
+  // Background sync
+  backgroundSyncEnabled: boolean
+  backgroundSyncInterval: number  // minutes (default: 30)
+
+  // Real-time sync
+  realtimeSyncEnabled: boolean
+  realtimeSyncDebounce: number    // ms (default: 2000)
+
+  // Layer settings
+  layer2Enabled: boolean          // Smart connections (requires Ollama)
+  layer3Enabled: boolean          // Coherence audits (requires Ollama)
+
+  // UI preferences
+  showSyncNotifications: boolean
+  autoResolveOrphanedLinks: boolean  // Auto-remove refs to deleted entities
+}
+
+// Default sync settings
+export const DEFAULT_SYNC_SETTINGS: SyncSettings = {
+  backgroundSyncEnabled: true,
+  backgroundSyncInterval: 30,
+  realtimeSyncEnabled: true,
+  realtimeSyncDebounce: 2000,
+  layer2Enabled: true,
+  layer3Enabled: true,
+  showSyncNotifications: true,
+  autoResolveOrphanedLinks: false,
+}
+
+// Coherence analysis result (LLM)
+export interface CoherenceAnalysis {
+  taskId: string
+  taskTitle: string
+  linkedGoalId: string
+  linkedGoalTitle: string
+  isAligned: boolean
+  alignmentScore: number          // 0-1
+  reasoning: string               // LLM explanation
+  suggestions: string[]           // How to improve alignment
+  alternativeGoals?: {
+    goalId: string
+    goalTitle: string
+    confidence: number
+  }[]
+}
+
+// Connection suggestion for unlinked items
+export interface ConnectionSuggestion {
+  entityId: string
+  entityTitle: string
+  entityType: SyncEntityType
+  suggestedGoals: {
+    goalId: string
+    goalTitle: string
+    goalLevel: "yearly" | "monthly" | "weekly"
+    confidence: number
+    reasoning: string
+  }[]
+  method: "llm" | "rule-based"
 }

@@ -157,7 +157,7 @@ export function TaskItem({ task, showDate = false }: TaskItemProps) {
           </DropdownMenu>
         </div>
 
-        <div className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground">
           <AspectBadge aspect={task.aspect} />
           <span>-</span>
           <span>{duration}min</span>
@@ -182,6 +182,13 @@ export function TaskItem({ task, showDate = false }: TaskItemProps) {
             </>
           )}
         </div>
+        {/* Implementation Intention - context cue display */}
+        {task.contextCue && task.status === "pending" && (
+          <p className="mt-1 text-xs text-muted-foreground/70 italic">
+            {task.contextCue}
+            {task.implementationPlan && `, I will ${task.implementationPlan}`}
+          </p>
+        )}
       </div>
     </div>
   )

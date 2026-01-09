@@ -5,6 +5,7 @@ import { TaskItem } from "@/components/task-item"
 import { ProgressRing } from "@/components/progress-ring"
 import { SentimentDot } from "@/components/sentiment-dot"
 import { OllamaStatusIndicator } from "@/components/inbox/ollama-status"
+import { BehavioralNudges, IdentityCard } from "@/components/behavioral-nudges"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ASPECT_CONFIG } from "@/lib/constants"
 import { useTasksStore } from "@/stores/tasks"
@@ -14,7 +15,7 @@ import { useTrainingStore } from "@/stores/training"
 import { useMealsStore } from "@/stores/meals"
 import type { LifeAspect, TimePreference } from "@/lib/types"
 import { Flame } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { calculateAspectProgress } from "@/services/progress"
 import { getSentimentLabel } from "@/services/analysis"
 
@@ -32,19 +33,23 @@ export default function DashboardPage() {
   const now = new Date()
   const hour = now.getHours()
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
-  const today = now.toISOString().split("T")[0]
+  // Use local timezone for "today" to match how formatDate stores dates
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
   const dateStr = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })
 
-  // Filter today's pending tasks
-  const todayTasks = tasks.filter((task) => task.scheduledDate === today && task.status === "pending")
+  // Filter today's pending tasks (memoized for performance with large task lists)
+  const todayTasks = useMemo(
+    () => tasks.filter((task) => task.scheduledDate === today && task.status === "pending"),
+    [tasks, today]
+  )
 
-  // Group tasks by time preference
-  const tasksByTime: Record<TimePreference, typeof todayTasks> = {
+  // Group tasks by time preference (memoized)
+  const tasksByTime = useMemo(() => ({
     morning: todayTasks.filter((t) => t.timePreference === "morning"),
     afternoon: todayTasks.filter((t) => t.timePreference === "afternoon"),
     evening: todayTasks.filter((t) => t.timePreference === "evening"),
     anytime: todayTasks.filter((t) => t.timePreference === "anytime"),
-  }
+  } as Record<TimePreference, typeof todayTasks>), [todayTasks])
 
   // Calculate aspect progress
   useEffect(() => {
@@ -60,7 +65,10 @@ export default function DashboardPage() {
     loadProgress()
   }, [yearlyGoals])
 
-  // Calculate streaks
+  // Calculate streaks - use local timezone to match stored dates
+  const formatLocalDate = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+
   const calculateStreak = (dates: string[]): number => {
     if (dates.length === 0) return 0
     const uniqueDates = [...new Set(dates)].sort(
@@ -73,10 +81,10 @@ export default function DashboardPage() {
     for (let i = 0; i < Math.min(uniqueDates.length, 365); i++) {
       const expectedDate = new Date(todayDate)
       expectedDate.setDate(todayDate.getDate() - streak)
-      const expectedStr = expectedDate.toISOString().split("T")[0]
+      const expectedStr = formatLocalDate(expectedDate)
       const prevExpectedDate = new Date(todayDate)
       prevExpectedDate.setDate(todayDate.getDate() - streak - 1)
-      const prevExpectedStr = prevExpectedDate.toISOString().split("T")[0]
+      const prevExpectedStr = formatLocalDate(prevExpectedDate)
 
       if (uniqueDates[i] === expectedStr || (streak === 0 && uniqueDates[i] === prevExpectedStr)) {
         streak++
@@ -92,7 +100,7 @@ export default function DashboardPage() {
   const cookedMeals = meals.filter((m) => m.cooked)
   const cookingStreak = calculateStreak([...new Set(cookedMeals.map((m) => m.date))])
   const journalStreak = calculateStreak(
-    journalEntries.map((e) => new Date(e.timestamp).toISOString().split("T")[0])
+    journalEntries.map((e) => formatLocalDate(new Date(e.timestamp)))
   )
 
   // Most recent journal entry
@@ -110,8 +118,14 @@ export default function DashboardPage() {
           <OllamaStatusIndicator variant="indicator" showReconnect={false} />
         </div>
 
+        {/* Identity & Behavioral Nudges */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <IdentityCard />
+          <BehavioralNudges maxNudges={2} />
+        </div>
+
         {/* Today's Tasks */}
-        <Card>
+        <Card className="animate-stagger animate-fade-in-up">
           <CardHeader>
             <CardTitle>Today's Tasks</CardTitle>
           </CardHeader>
@@ -137,23 +151,28 @@ export default function DashboardPage() {
         </Card>
 
         {/* Goal Progress */}
-        <Card>
+        <Card className="animate-stagger animate-fade-in-up animation-delay-100">
           <CardHeader>
             <CardTitle>Goal Progress</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex gap-4 overflow-x-auto pb-2">
-              {aspectProgress.map((item) => {
+              {aspectProgress.map((item, index) => {
                 const config = ASPECT_CONFIG[item.aspect]
                 const Icon = config.icon
                 return (
                   <div
                     key={item.aspect}
-                    className="flex min-w-[120px] flex-col items-center gap-3 rounded-lg border border-border p-4"
+                    className="flex min-w-[120px] flex-col items-center gap-3 rounded-lg border border-border p-4 transition-all duration-200 hover:border-border/80 hover:shadow-sm hover:-translate-y-0.5"
+                    style={{ animationDelay: `${150 + index * 50}ms` }}
                   >
-                    <ProgressRing progress={item.progress} color={config.color} />
+                    <ProgressRing
+                      progress={item.progress}
+                      color={config.color}
+                      label={`${config.label} progress`}
+                    />
                     <div className="flex flex-col items-center gap-1">
-                      <Icon className="h-4 w-4" style={{ color: config.color }} />
+                      <Icon className="h-4 w-4" style={{ color: config.color }} aria-hidden="true" />
                       <span className="text-xs font-medium text-center">{config.label}</span>
                     </div>
                   </div>
@@ -165,7 +184,7 @@ export default function DashboardPage() {
 
         {/* Recent Journal */}
         {recentJournal && (
-          <Card>
+          <Card className="animate-stagger animate-fade-in-up animation-delay-200">
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <span>Recent Journal</span>
@@ -188,28 +207,28 @@ export default function DashboardPage() {
         )}
 
         {/* Quick Stats */}
-        <Card>
+        <Card className="animate-stagger animate-fade-in-up animation-delay-300">
           <CardHeader>
             <CardTitle>Quick Stats</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-4">
-              <div className="flex flex-col items-center gap-2 rounded-lg border border-border p-4">
-                <Flame className="h-6 w-6 text-orange-500" />
+              <div className="flex flex-col items-center gap-2 rounded-lg border border-border p-4 transition-all duration-200 hover:border-orange-500/30 hover:shadow-sm">
+                <Flame className="h-6 w-6 text-orange-500" aria-hidden="true" />
                 <div className="text-center">
                   <div className="text-2xl font-bold">{trainingStreak}</div>
                   <div className="text-xs text-muted-foreground">Training Days</div>
                 </div>
               </div>
-              <div className="flex flex-col items-center gap-2 rounded-lg border border-border p-4">
-                <Flame className="h-6 w-6 text-green-500" />
+              <div className="flex flex-col items-center gap-2 rounded-lg border border-border p-4 transition-all duration-200 hover:border-green-500/30 hover:shadow-sm">
+                <Flame className="h-6 w-6 text-green-500" aria-hidden="true" />
                 <div className="text-center">
                   <div className="text-2xl font-bold">{cookingStreak}</div>
                   <div className="text-xs text-muted-foreground">Cooking Streak</div>
                 </div>
               </div>
-              <div className="flex flex-col items-center gap-2 rounded-lg border border-border p-4">
-                <Flame className="h-6 w-6 text-blue-500" />
+              <div className="flex flex-col items-center gap-2 rounded-lg border border-border p-4 transition-all duration-200 hover:border-blue-500/30 hover:shadow-sm">
+                <Flame className="h-6 w-6 text-blue-500" aria-hidden="true" />
                 <div className="text-center">
                   <div className="text-2xl font-bold">{journalStreak}</div>
                   <div className="text-xs text-muted-foreground">Journal Streak</div>

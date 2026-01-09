@@ -21,6 +21,7 @@ import {
   AlertCircle,
   Target,
   Plus,
+  Loader2,
 } from "lucide-react"
 import { GoalSelector } from "./goal-selector"
 import { ConflictWarning } from "./conflict-warning"
@@ -30,6 +31,7 @@ import { format } from "date-fns"
 interface ParsedPreviewProps {
   parsed: ParsedResult
   originalText: string
+  isEnhancing?: boolean
   onConfirm: (task: Partial<Task>, breakdown?: TaskBreakdown) => void
   onEdit: () => void
   onDismiss: () => void
@@ -117,6 +119,7 @@ function SlotDisplay({
 export function ParsedPreview({
   parsed,
   originalText,
+  isEnhancing = false,
   onConfirm,
   onEdit,
   onDismiss,
@@ -140,12 +143,17 @@ export function ParsedPreview({
       const date = suggestedTask.scheduledDate
 
       if (time && date) {
-        const result = await checkTimeConflict(
-          date,
-          time,
-          suggestedTask.durationEstimate || 60
-        )
-        setConflictResult(result)
+        try {
+          const result = await checkTimeConflict(
+            date,
+            time,
+            suggestedTask.durationEstimate || 60
+          )
+          setConflictResult(result)
+        } catch (error) {
+          console.error("Failed to check time conflicts:", error)
+          setConflictResult(null)
+        }
       } else {
         setConflictResult(null)
       }
@@ -218,7 +226,13 @@ export function ParsedPreview({
                   Review Suggested
                 </Badge>
               )}
-              {parsingMethod === "hybrid" && (
+              {isEnhancing && (
+                <span className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400 animate-pulse">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Enhancing...
+                </span>
+              )}
+              {!isEnhancing && parsingMethod === "hybrid" && (
                 <span className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400">
                   <Sparkles className="h-3 w-3" />
                   AI Enhanced

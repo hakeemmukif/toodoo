@@ -13,6 +13,16 @@ import type { LifeAspect, TimePreference } from "@/lib/types"
 import type { WizardStep, WizardMode, WizardState, GoalWizardProps } from "./types"
 
 import { StepAspect } from "./step-aspect"
+import { StepGoalType } from "./step-goal-type"
+import { StepWish } from "./step-wish"
+import { StepOutcome } from "./step-outcome"
+import { StepObstacle } from "./step-obstacle"
+import { StepPlan } from "./step-plan"
+import { StepIdentity } from "./step-identity"
+import { StepConfigureHabit } from "./step-configure-habit"
+import { StepConfigureMastery } from "./step-configure-mastery"
+import { StepConfigureProject } from "./step-configure-project"
+import { StepConfigureOutcome } from "./step-configure-outcome"
 import { StepYearly } from "./step-yearly"
 import { StepMonthly } from "./step-monthly"
 import { StepWeekly } from "./step-weekly"
@@ -24,8 +34,16 @@ import { StepSummary } from "./step-summary"
 const aspects = Object.keys(ASPECT_CONFIG) as LifeAspect[]
 
 function getStepOrder(mode: WizardMode, includeOtherAspects: boolean): WizardStep[] {
+  // WOOP-enhanced flow: psychology-backed goal creation
   const baseSteps: WizardStep[] = [
     "pick-aspect",
+    "pick-goal-type",        // NEW: Choose goal type
+    "wish",                  // WOOP - W: What do you want?
+    "outcome-visualization", // WOOP - O: Best outcome
+    "obstacle-discovery",    // WOOP - O: Inner obstacle
+    "plan-creation",         // WOOP - P: If-then plans
+    "identity-statement",    // Identity-based goals
+    "configure-goal-type",   // Type-specific config
     "yearly-goal",
     "monthly-goal",
     "weekly-goal",
@@ -58,17 +76,44 @@ export function GoalWizard({
   const [currentStep, setCurrentStep] = useState<WizardStep>(initialStep)
   const [isSaving, setIsSaving] = useState(false)
 
-  // Wizard state
+  // Wizard state - WOOP-enhanced with psychology-backed fields
   const [state, setState] = useState<WizardState>(() => ({
     primaryAspect: defaultAspect || null,
+
+    // Goal type (will be suggested based on aspect)
+    goalType: null,
+
+    // WOOP Data
+    wish: "",
+    outcomeVisualization: "",
+    mainObstacle: "",
+    ifThenPlans: [],
+
+    // Identity & Motivation
+    identityStatement: "",
+    whyImportant: "",
+
+    // Type-specific configurations
+    habitConfig: null,
+    masteryConfig: null,
+    projectConfig: null,
+    outcomeConfig: null,
+
+    // Goal hierarchy
     yearlyGoal: { title: "", criteria: "" },
     monthlyGoal: { title: "" },
     weeklyGoal: { title: "" },
+
+    // First task with implementation intention
     firstTask: {
       title: "",
       scheduledDate: formatDate(new Date()),
       timePreference: "morning" as TimePreference,
+      contextCue: "",
+      implementationPlan: "",
     },
+
+    // Other aspects
     otherGoals: aspects.reduce(
       (acc, aspect) => ({
         ...acc,
@@ -113,7 +158,7 @@ export function GoalWizard({
     }
   }
 
-  // Save handler
+  // Save handler - WOOP-enhanced goal creation
   const handleFinish = async () => {
     if (!state.primaryAspect) return
 
@@ -124,15 +169,68 @@ export function GoalWizard({
     const currentWeek = getWeekString(today)
 
     try {
-      // 1. Create yearly goal for primary aspect
+      // Build WOOP data from wizard state
+      const woopData = state.wish ? {
+        wish: state.wish,
+        outcome: state.outcomeVisualization,
+        obstacle: state.mainObstacle,
+        plan: state.ifThenPlans[0] || "",
+      } : undefined
+
+      // Build type-specific data
+      const habitData = state.goalType === "habit" && state.habitConfig ? {
+        target: state.habitConfig.target || 3,
+        period: state.habitConfig.period || "week",
+        action: state.habitConfig.action || "",
+        contextCue: state.habitConfig.contextCue || "",
+        implementation: state.habitConfig.implementation || "",
+        suggestedDays: state.habitConfig.suggestedDays,
+        flexibleSchedule: state.habitConfig.flexibleSchedule ?? true,
+        currentStreak: 0,
+        longestStreak: 0,
+      } : undefined
+
+      const masteryData = state.goalType === "mastery" && state.masteryConfig ? {
+        skillLevels: state.masteryConfig.skillLevels || [],
+        currentLevel: state.masteryConfig.currentLevel || 0,
+        resources: state.masteryConfig.resources || [],
+        practiceLog: [],
+      } : undefined
+
+      const projectData = state.goalType === "project" && state.projectConfig ? {
+        milestones: state.projectConfig.milestones || [],
+        estimatedCompletionDate: state.projectConfig.estimatedCompletionDate,
+        nextAction: state.projectConfig.nextAction,
+      } : undefined
+
+      const outcomeData = state.goalType === "outcome" && state.outcomeConfig ? {
+        targetValue: state.outcomeConfig.targetValue || 0,
+        currentValue: state.outcomeConfig.currentValue || 0,
+        unit: state.outcomeConfig.unit || "",
+        checkpoints: state.outcomeConfig.checkpoints || [],
+      } : undefined
+
+      // 1. Create yearly goal for primary aspect with WOOP and type data
       const yearlyId = await addYearlyGoal({
         aspect: state.primaryAspect,
         year: currentYear,
-        title: state.yearlyGoal.title,
+        title: state.yearlyGoal.title || state.wish, // Use wish as fallback title
         description: state.yearlyGoal.criteria,
         successCriteria: state.yearlyGoal.criteria,
         status: "active",
         priority: 1,
+        // Psychology-backed fields
+        goalType: state.goalType || "project",
+        woop: woopData,
+        identityStatement: state.identityStatement || undefined,
+        motivation: state.whyImportant ? { whyImportant: state.whyImportant } : undefined,
+        anticipatedObstacles: state.mainObstacle ? [state.mainObstacle] : undefined,
+        ifThenPlans: state.ifThenPlans.length > 0 ? state.ifThenPlans : undefined,
+        // Type-specific data
+        habit: habitData,
+        mastery: masteryData,
+        project: projectData,
+        outcome: outcomeData,
       })
 
       // 2. Create monthly goal linked to yearly
@@ -154,7 +252,7 @@ export function GoalWizard({
         status: "active",
       })
 
-      // 4. Create task linked to weekly
+      // 4. Create task linked to weekly with implementation intention
       await addTask({
         weeklyGoalId: weeklyId,
         aspect: state.primaryAspect,
@@ -163,6 +261,9 @@ export function GoalWizard({
         timePreference: state.firstTask.timePreference,
         status: "pending",
         deferCount: 0,
+        // Implementation intention (Gollwitzer)
+        contextCue: state.firstTask.contextCue || habitData?.contextCue || undefined,
+        implementationPlan: state.firstTask.implementationPlan || undefined,
       })
 
       // 5. Create yearly goals for other aspects (if applicable)
@@ -238,6 +339,136 @@ export function GoalWizard({
           />
         )
 
+      case "pick-goal-type":
+        if (!state.primaryAspect) return null
+        return (
+          <StepGoalType
+            aspect={state.primaryAspect}
+            selectedType={state.goalType}
+            onSelect={(type) => setState({ ...state, goalType: type })}
+            onNext={nextStep}
+            onBack={prevStep}
+          />
+        )
+
+      case "wish":
+        if (!state.primaryAspect || !state.goalType) return null
+        return (
+          <StepWish
+            aspect={state.primaryAspect}
+            goalType={state.goalType}
+            value={state.wish}
+            onChange={(wish) => setState({ ...state, wish })}
+            onNext={nextStep}
+            onBack={prevStep}
+          />
+        )
+
+      case "outcome-visualization":
+        if (!state.primaryAspect || !state.goalType) return null
+        return (
+          <StepOutcome
+            aspect={state.primaryAspect}
+            goalType={state.goalType}
+            wish={state.wish}
+            value={state.outcomeVisualization}
+            onChange={(outcomeVisualization) => setState({ ...state, outcomeVisualization })}
+            onNext={nextStep}
+            onBack={prevStep}
+          />
+        )
+
+      case "obstacle-discovery":
+        if (!state.primaryAspect) return null
+        return (
+          <StepObstacle
+            aspect={state.primaryAspect}
+            wish={state.wish}
+            value={state.mainObstacle}
+            onChange={(mainObstacle) => setState({ ...state, mainObstacle })}
+            onNext={nextStep}
+            onBack={prevStep}
+          />
+        )
+
+      case "plan-creation":
+        if (!state.primaryAspect) return null
+        return (
+          <StepPlan
+            aspect={state.primaryAspect}
+            obstacle={state.mainObstacle}
+            value={state.ifThenPlans}
+            onChange={(ifThenPlans) => setState({ ...state, ifThenPlans })}
+            onNext={nextStep}
+            onBack={prevStep}
+          />
+        )
+
+      case "identity-statement":
+        if (!state.primaryAspect || !state.goalType) return null
+        return (
+          <StepIdentity
+            aspect={state.primaryAspect}
+            goalType={state.goalType}
+            wish={state.wish}
+            value={state.identityStatement}
+            onChange={(identityStatement) => setState({ ...state, identityStatement })}
+            onNext={nextStep}
+            onBack={prevStep}
+          />
+        )
+
+      case "configure-goal-type":
+        if (!state.primaryAspect || !state.goalType) return null
+        switch (state.goalType) {
+          case "habit":
+            return (
+              <StepConfigureHabit
+                aspect={state.primaryAspect}
+                wish={state.wish}
+                value={state.habitConfig}
+                onChange={(habitConfig) => setState({ ...state, habitConfig })}
+                onNext={nextStep}
+                onBack={prevStep}
+              />
+            )
+          case "mastery":
+            return (
+              <StepConfigureMastery
+                aspect={state.primaryAspect}
+                wish={state.wish}
+                value={state.masteryConfig}
+                onChange={(masteryConfig) => setState({ ...state, masteryConfig })}
+                onNext={nextStep}
+                onBack={prevStep}
+              />
+            )
+          case "project":
+            return (
+              <StepConfigureProject
+                aspect={state.primaryAspect}
+                wish={state.wish}
+                value={state.projectConfig}
+                onChange={(projectConfig) => setState({ ...state, projectConfig })}
+                onNext={nextStep}
+                onBack={prevStep}
+              />
+            )
+          case "outcome":
+            return (
+              <StepConfigureOutcome
+                aspect={state.primaryAspect}
+                wish={state.wish}
+                value={state.outcomeConfig}
+                onChange={(outcomeConfig) => setState({ ...state, outcomeConfig })}
+                onNext={nextStep}
+                onBack={prevStep}
+              />
+            )
+          default:
+            return null
+        }
+
       case "yearly-goal":
         if (!state.primaryAspect) return null
         return (
@@ -284,7 +515,13 @@ export function GoalWizard({
             aspect={state.primaryAspect}
             weeklyGoalTitle={state.weeklyGoal.title}
             value={state.firstTask}
-            onChange={(v) => setState({ ...state, firstTask: v })}
+            onChange={(v) => setState({
+              ...state,
+              firstTask: {
+                ...state.firstTask,  // Preserve contextCue and implementationPlan
+                ...v,
+              },
+            })}
             onNext={nextStep}
             onBack={prevStep}
           />

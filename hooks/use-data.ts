@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useGoalsStore } from "@/stores/goals"
 import { useTasksStore } from "@/stores/tasks"
 import { useJournalStore } from "@/stores/journal"
@@ -12,6 +12,8 @@ import { useAppStore } from "@/stores/app"
 import { useInboxStore } from "@/stores/inbox"
 import { useReviewsStore } from "@/stores/reviews"
 import { useFinancialStore } from "@/stores/financial"
+import { useInventoryStore } from "@/stores/inventory"
+import { useAirFryerStore } from "@/stores/air-fryer"
 
 /**
  * Hook to initialize all stores and load data
@@ -25,23 +27,31 @@ export function useInitializeData() {
   const setDataLoaded = useAppStore((state) => state.setDataLoaded)
   const initialize = useAppStore((state) => state.initialize)
 
-  const loadGoals = useGoalsStore((state) => state.loadGoals)
-  const loadTasks = useTasksStore((state) => state.loadTasks)
-  const loadRecurrenceTemplates = useTasksStore((state) => state.loadRecurrenceTemplates)
-  const loadEntries = useJournalStore((state) => state.loadEntries)
-  const loadSessions = useTrainingStore((state) => state.loadSessions)
-  const loadMeals = useMealsStore((state) => state.loadMeals)
-  const loadRecipes = useRecipesStore((state) => state.loadRecipes)
-  const loadLists = useShoppingStore((state) => state.loadLists)
-  const loadItems = useShoppingStore((state) => state.loadItems)
-  const loadInboxItems = useInboxStore((state) => state.loadItems)
-  const loadReviews = useReviewsStore((state) => state.loadReviews)
-  const loadSnapshots = useFinancialStore((state) => state.loadSnapshots)
+  // Store loading functions in refs to avoid dependency array issues
+  // Zustand actions are stable, but refs make this explicit and lint-friendly
+  const loadersRef = useRef({
+    loadGoals: useGoalsStore.getState().loadGoals,
+    loadTasks: useTasksStore.getState().loadTasks,
+    loadRecurrenceTemplates: useTasksStore.getState().loadRecurrenceTemplates,
+    loadEntries: useJournalStore.getState().loadEntries,
+    loadSessions: useTrainingStore.getState().loadSessions,
+    loadMeals: useMealsStore.getState().loadMeals,
+    loadRecipes: useRecipesStore.getState().loadRecipes,
+    loadLists: useShoppingStore.getState().loadLists,
+    loadItems: useShoppingStore.getState().loadItems,
+    loadInboxItems: useInboxStore.getState().loadItems,
+    loadReviews: useReviewsStore.getState().loadReviews,
+    loadSnapshots: useFinancialStore.getState().loadSnapshots,
+    loadInventory: useInventoryStore.getState().loadItems,
+    loadAirFryerRecipes: useAirFryerStore.getState().loadRecipes,
+  })
 
   useEffect(() => {
     async function loadAllData() {
       // Skip if already loaded - this is the key for instant navigation
       if (isDataLoaded) return
+
+      const loaders = loadersRef.current
 
       try {
         // Initialize app first
@@ -49,18 +59,20 @@ export function useInitializeData() {
 
         // Load all data in parallel
         await Promise.all([
-          loadGoals(),
-          loadTasks(),
-          loadRecurrenceTemplates(),
-          loadEntries(),
-          loadSessions(),
-          loadMeals(),
-          loadRecipes(),
-          loadLists(),
-          loadItems(),
-          loadInboxItems(),
-          loadReviews(),
-          loadSnapshots(),
+          loaders.loadGoals(),
+          loaders.loadTasks(),
+          loaders.loadRecurrenceTemplates(),
+          loaders.loadEntries(),
+          loaders.loadSessions(),
+          loaders.loadMeals(),
+          loaders.loadRecipes(),
+          loaders.loadLists(),
+          loaders.loadItems(),
+          loaders.loadInboxItems(),
+          loaders.loadReviews(),
+          loaders.loadSnapshots(),
+          loaders.loadInventory(),
+          loaders.loadAirFryerRecipes(),
         ])
 
         setDataLoaded()
@@ -71,23 +83,7 @@ export function useInitializeData() {
     }
 
     loadAllData()
-  }, [
-    isDataLoaded,
-    setDataLoaded,
-    initialize,
-    loadGoals,
-    loadTasks,
-    loadRecurrenceTemplates,
-    loadEntries,
-    loadSessions,
-    loadMeals,
-    loadRecipes,
-    loadLists,
-    loadItems,
-    loadInboxItems,
-    loadReviews,
-    loadSnapshots,
-  ])
+  }, [isDataLoaded, setDataLoaded, initialize])
 
   return { isDataLoaded, isLoading: !isDataLoaded && !error, error }
 }
@@ -102,7 +98,9 @@ export function useDashboardData() {
   const meals = useMealsStore((state) => state.meals)
   const journalEntries = useJournalStore((state) => state.entries)
 
-  const today = new Date().toISOString().split("T")[0]
+  // Use local timezone for "today" to match how formatDate stores dates
+  const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
 
   // Today's tasks
   const todayTasks = tasks.filter(

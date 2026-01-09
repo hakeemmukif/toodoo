@@ -18,6 +18,11 @@ import type {
   FinancialSnapshot,
   StreakData,
   PlanningDraft,
+  SyncIssue,
+  SyncRunResult,
+  InventoryItem,
+  AirFryerRecipe,
+  AirFryerDevice,
 } from "@/lib/types"
 
 class LifeTrackerDB extends Dexie {
@@ -39,6 +44,13 @@ class LifeTrackerDB extends Dexie {
   financialSnapshots!: Table<FinancialSnapshot>
   streakData!: Table<StreakData>
   planningDrafts!: Table<PlanningDraft>
+  syncIssues!: Table<SyncIssue>
+  syncRuns!: Table<SyncRunResult>
+  // Version 9: Air fryer feature
+  inventoryItems!: Table<InventoryItem>
+  airFryerRecipes!: Table<AirFryerRecipe>
+  // Version 10: Air fryer device settings
+  airFryerDevices!: Table<AirFryerDevice>
 
   constructor() {
     super("LifeTrackerDB")
@@ -195,6 +207,121 @@ class LifeTrackerDB extends Dexie {
         }
       })
     })
+
+    // Version 7: Sync/Coherence system for data integrity and LLM-powered connections
+    this.version(7).stores({
+      yearlyGoals: "id, aspect, year, status, priority",
+      monthlyGoals: "id, yearlyGoalId, aspect, month, status, priority",
+      weeklyGoals: "id, monthlyGoalId, aspect, week, status",
+      tasks: "id, weeklyGoalId, aspect, scheduledDate, status, recurrenceTemplateId, deferCount, parentTaskId, isSubtask, hardScheduledTime",
+      recurrenceTemplates: "id, aspect, isActive",
+      journalEntries: "id, timestamp, *detectedAspects, goalAlignment, promptCategory, energyLevel, *linkedGoalIds, goalContext",
+      trainingSessions: "id, date, type, isHardThing, linkedGoalId",
+      meals: "id, date, type, recipeId, cooked, linkedGoalId",
+      recipes: "id, *tags, rating",
+      shoppingLists: "id, store",
+      shoppingItems: "id, listId, category, status, priority",
+      scheduleBlocks: "id, date, type, depth, linkedTaskId, linkedGoalId",
+      appSettings: "id",
+      inboxItems: "id, capturedAt, processedAt, parseVersion",
+      weeklyReviews: "id, weekOf, completedAt",
+      financialSnapshots: "id, date, linkedGoalId, onTrack",
+      streakData: "type",
+      planningDrafts: "id, aspect, createdAt, lastModifiedAt",
+      // New: Sync system tables
+      syncIssues: "id, type, severity, entityType, entityId, layer, detectedAt, resolvedAt",
+      syncRuns: "id, runType, startedAt",
+    })
+
+    // Version 8: Psychology-backed goal types (WOOP, Implementation Intentions)
+    // Added: goalType index to yearlyGoals for filtering by goal type
+    // New fields are stored as objects (not indexed): woop, motivation, habit, mastery, project, outcome
+    this.version(8).stores({
+      yearlyGoals: "id, aspect, year, status, priority, goalType",
+      monthlyGoals: "id, yearlyGoalId, aspect, month, status, priority",
+      weeklyGoals: "id, monthlyGoalId, aspect, week, status",
+      tasks: "id, weeklyGoalId, aspect, scheduledDate, status, recurrenceTemplateId, deferCount, parentTaskId, isSubtask, hardScheduledTime",
+      recurrenceTemplates: "id, aspect, isActive",
+      journalEntries: "id, timestamp, *detectedAspects, goalAlignment, promptCategory, energyLevel, *linkedGoalIds, goalContext",
+      trainingSessions: "id, date, type, isHardThing, linkedGoalId",
+      meals: "id, date, type, recipeId, cooked, linkedGoalId",
+      recipes: "id, *tags, rating",
+      shoppingLists: "id, store",
+      shoppingItems: "id, listId, category, status, priority",
+      scheduleBlocks: "id, date, type, depth, linkedTaskId, linkedGoalId",
+      appSettings: "id",
+      inboxItems: "id, capturedAt, processedAt, parseVersion",
+      weeklyReviews: "id, weekOf, completedAt",
+      financialSnapshots: "id, date, linkedGoalId, onTrack",
+      streakData: "type",
+      planningDrafts: "id, aspect, createdAt, lastModifiedAt",
+      syncIssues: "id, type, severity, entityType, entityId, layer, detectedAt, resolvedAt",
+      syncRuns: "id, runType, startedAt",
+    }).upgrade((tx) => {
+      // Migrate existing yearly goals to have goalType = "project" (safest default)
+      return tx.table("yearlyGoals").toCollection().modify((goal) => {
+        if (goal.goalType === undefined) {
+          goal.goalType = "project"
+        }
+      })
+    })
+
+    // Version 9: Air fryer recipe suggestions with pantry inventory
+    // New tables: inventoryItems (pantry tracking), airFryerRecipes (extended recipe with steps)
+    this.version(9).stores({
+      yearlyGoals: "id, aspect, year, status, priority, goalType",
+      monthlyGoals: "id, yearlyGoalId, aspect, month, status, priority",
+      weeklyGoals: "id, monthlyGoalId, aspect, week, status",
+      tasks: "id, weeklyGoalId, aspect, scheduledDate, status, recurrenceTemplateId, deferCount, parentTaskId, isSubtask, hardScheduledTime",
+      recurrenceTemplates: "id, aspect, isActive",
+      journalEntries: "id, timestamp, *detectedAspects, goalAlignment, promptCategory, energyLevel, *linkedGoalIds, goalContext",
+      trainingSessions: "id, date, type, isHardThing, linkedGoalId",
+      meals: "id, date, type, recipeId, cooked, linkedGoalId",
+      recipes: "id, *tags, rating",
+      shoppingLists: "id, store",
+      shoppingItems: "id, listId, category, status, priority",
+      scheduleBlocks: "id, date, type, depth, linkedTaskId, linkedGoalId",
+      appSettings: "id",
+      inboxItems: "id, capturedAt, processedAt, parseVersion",
+      weeklyReviews: "id, weekOf, completedAt",
+      financialSnapshots: "id, date, linkedGoalId, onTrack",
+      streakData: "type",
+      planningDrafts: "id, aspect, createdAt, lastModifiedAt",
+      syncIssues: "id, type, severity, entityType, entityId, layer, detectedAt, resolvedAt",
+      syncRuns: "id, runType, startedAt",
+      // New: Pantry inventory for ingredient tracking
+      inventoryItems: "id, normalizedName, category, expiresAt",
+      // New: Air fryer recipes with guided steps
+      airFryerRecipes: "id, difficulty, *tags",
+    })
+
+    // Version 10: Air fryer device settings (capacity, temp unit preference)
+    this.version(10).stores({
+      yearlyGoals: "id, aspect, year, status, priority, goalType",
+      monthlyGoals: "id, yearlyGoalId, aspect, month, status, priority",
+      weeklyGoals: "id, monthlyGoalId, aspect, week, status",
+      tasks: "id, weeklyGoalId, aspect, scheduledDate, status, recurrenceTemplateId, deferCount, parentTaskId, isSubtask, hardScheduledTime",
+      recurrenceTemplates: "id, aspect, isActive",
+      journalEntries: "id, timestamp, *detectedAspects, goalAlignment, promptCategory, energyLevel, *linkedGoalIds, goalContext",
+      trainingSessions: "id, date, type, isHardThing, linkedGoalId",
+      meals: "id, date, type, recipeId, cooked, linkedGoalId",
+      recipes: "id, *tags, rating",
+      shoppingLists: "id, store",
+      shoppingItems: "id, listId, category, status, priority",
+      scheduleBlocks: "id, date, type, depth, linkedTaskId, linkedGoalId",
+      appSettings: "id",
+      inboxItems: "id, capturedAt, processedAt, parseVersion",
+      weeklyReviews: "id, weekOf, completedAt",
+      financialSnapshots: "id, date, linkedGoalId, onTrack",
+      streakData: "type",
+      planningDrafts: "id, aspect, createdAt, lastModifiedAt",
+      syncIssues: "id, type, severity, entityType, entityId, layer, detectedAt, resolvedAt",
+      syncRuns: "id, runType, startedAt",
+      inventoryItems: "id, normalizedName, category, expiresAt",
+      airFryerRecipes: "id, difficulty, *tags",
+      // New: User's air fryer device configuration
+      airFryerDevices: "id",
+    })
   }
 }
 
@@ -262,7 +389,11 @@ export function generateId(): string {
 
 // Format date helpers
 export function formatDate(date: Date): string {
-  return date.toISOString().split("T")[0]
+  // Use local timezone components to avoid off-by-one errors for users ahead of UTC
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
 }
 
 export function getWeekString(date: Date): string {

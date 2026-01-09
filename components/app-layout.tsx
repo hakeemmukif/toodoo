@@ -25,6 +25,7 @@ import {
   ClipboardCheck,
   Wallet,
   ChevronDown,
+  Repeat,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -38,6 +39,7 @@ interface NavItem {
   href: string
   label: string
   icon: LucideIcon
+  disabled?: boolean
 }
 
 interface NavSection {
@@ -53,7 +55,7 @@ const coreNavItems: NavItem[] = [
   { href: "/calendar", label: "Calendar", icon: Calendar },
   { href: "/goals", label: "Goals", icon: Target },
   { href: "/tasks", label: "Tasks", icon: ListTodo },
-  { href: "/journal", label: "Journal", icon: BookOpen },
+  { href: "/journal", label: "Journal", icon: BookOpen, disabled: true },
 ]
 
 // Collapsible sections with progressive disclosure
@@ -62,16 +64,17 @@ const navSections: NavSection[] = [
     title: "Track",
     defaultOpen: false,
     items: [
-      { href: "/training", label: "Training", icon: Dumbbell },
+      { href: "/training", label: "Training", icon: Dumbbell, disabled: true },
       { href: "/meals", label: "Meals", icon: Utensils },
-      { href: "/financial", label: "Financial", icon: Wallet },
+      { href: "/financial", label: "Financial", icon: Wallet, disabled: true },
     ],
   },
   {
     title: "Organize",
     defaultOpen: false,
     items: [
-      { href: "/shopping", label: "Shopping", icon: ShoppingCart },
+      { href: "/recurring", label: "Recurring", icon: Repeat },
+      { href: "/shopping", label: "Shopping", icon: ShoppingCart, disabled: true },
       { href: "/recipes", label: "Recipes", icon: BookMarked },
     ],
   },
@@ -79,8 +82,8 @@ const navSections: NavSection[] = [
     title: "Reflect",
     defaultOpen: false,
     items: [
-      { href: "/review", label: "Weekly Review", icon: ClipboardCheck },
-      { href: "/analysis", label: "Analysis", icon: BarChart3 },
+      { href: "/review", label: "Weekly Review", icon: ClipboardCheck, disabled: true },
+      { href: "/analysis", label: "Analysis", icon: BarChart3, disabled: true },
     ],
   },
 ]
@@ -90,9 +93,9 @@ const settingsItem: NavItem = { href: "/settings", label: "Settings", icon: Sett
 const quickActions = [
   { label: "Add Goal", icon: Target, action: "add-goal" },
   { label: "Add Task", icon: Plus, action: "add-task", href: "/tasks" },
-  { label: "Write Journal", icon: PenLine, action: "write-journal", href: "/journal" },
+  { label: "Write Journal", icon: PenLine, action: "write-journal", href: "/journal", disabled: true },
   { label: "Log Meal", icon: UtensilsCrossed, action: "log-meal", href: "/meals" },
-  { label: "Log Training", icon: Activity, action: "log-training", href: "/training" },
+  { label: "Log Training", icon: Activity, action: "log-training", href: "/training", disabled: true },
 ]
 
 // Mobile bottom nav items - most commonly used
@@ -105,6 +108,20 @@ const mobileBottomNavItems: NavItem[] = [
 
 function NavLink({ item, isActive, onClick }: { item: NavItem; isActive: boolean; onClick?: () => void }) {
   const Icon = item.icon
+
+  if (item.disabled) {
+    return (
+      <span
+        className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm cursor-not-allowed opacity-40 select-none hover:bg-transparent"
+        title="Coming soon"
+      >
+        <Icon className="h-[18px] w-[18px] stroke-[1.5]" />
+        {item.label}
+        <span className="ml-auto font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Soon</span>
+      </span>
+    )
+  }
+
   return (
     <Link
       href={item.href}
@@ -223,8 +240,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <h1 className="font-serif text-lg font-semibold tracking-tight">Life Tracker</h1>
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-9 w-9">
-              <Menu className="h-5 w-5 stroke-[1.5]" />
+            <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Open navigation menu">
+              <Menu className="h-5 w-5 stroke-[1.5]" aria-hidden="true" />
             </Button>
           </SheetTrigger>
           <SheetContent side="right" className="w-64 overflow-y-auto">
@@ -296,8 +313,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         })}
         <Sheet>
           <SheetTrigger asChild>
-            <button className="flex flex-col items-center gap-1 px-3 py-2 text-[11px] text-muted-foreground">
-              <Menu className="h-5 w-5 stroke-[1.5]" />
+            <button
+              className="flex flex-col items-center gap-1 px-3 py-2 text-[11px] text-muted-foreground"
+              aria-label="Open more options menu"
+            >
+              <Menu className="h-5 w-5 stroke-[1.5]" aria-hidden="true" />
               <span>More</span>
             </button>
           </SheetTrigger>
@@ -311,6 +331,19 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   <div className="grid grid-cols-3 gap-3">
                     {section.items.map((item) => {
                       const Icon = item.icon
+                      if (item.disabled) {
+                        return (
+                          <span
+                            key={item.href}
+                            className="flex flex-col items-center gap-2 rounded-lg p-3 text-center opacity-40 cursor-not-allowed select-none hover:bg-transparent"
+                            title="Coming soon"
+                          >
+                            <Icon className="h-6 w-6 stroke-[1.5] text-muted-foreground" />
+                            <span className="text-xs">{item.label}</span>
+                            <span className="font-mono text-[8px] uppercase tracking-wider text-muted-foreground">Soon</span>
+                          </span>
+                        )
+                      }
                       return (
                         <Link
                           key={item.href}
@@ -345,8 +378,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <Button
             size="icon"
             className="fixed bottom-20 right-4 h-12 w-12 rounded-full shadow-md transition-shadow hover:shadow-lg lg:bottom-4"
+            aria-label="Quick actions menu"
           >
-            <Plus className="h-5 w-5" />
+            <Plus className="h-5 w-5" aria-hidden="true" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
@@ -355,10 +389,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             return (
               <DropdownMenuItem
                 key={action.action}
-                onClick={() => handleQuickAction(action.action, action.href)}
+                onClick={() => !action.disabled && handleQuickAction(action.action, action.href)}
+                disabled={action.disabled}
+                className={action.disabled ? "opacity-40 cursor-not-allowed" : ""}
               >
                 <Icon className="mr-2 h-4 w-4 stroke-[1.5]" />
                 {action.label}
+                {action.disabled && (
+                  <span className="ml-auto font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Soon</span>
+                )}
               </DropdownMenuItem>
             )
           })}

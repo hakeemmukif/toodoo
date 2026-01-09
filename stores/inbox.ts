@@ -2,7 +2,7 @@ import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { db, generateId } from "@/db"
 import type { InboxItem, ParsedResult, ClarificationState, SlotType } from "@/lib/types"
-import { parseInboxItem, PARSER_VERSION } from "@/services/inbox-parser"
+import { parseInboxItem, enhanceWithOllama, PARSER_VERSION } from "@/services/inbox-parser"
 import { generateBreakdown } from "@/services/inbox-parser/breakdown-generator"
 import { analyzeSlots } from "@/services/inbox-parser/slot-analyzer"
 import { generateClarificationQuestions } from "@/services/inbox-parser/question-generator"
@@ -21,6 +21,10 @@ interface InboxState {
   clarificationState: ClarificationState | null
   isClarifying: boolean
   isGeneratingQuestions: boolean
+
+  // Ollama enhancement state
+  isEnhancing: boolean
+  enhancingItemId: string | null
 
   // Actions
   loadItems: () => Promise<void>
@@ -60,6 +64,10 @@ export const useInboxStore = create<InboxState>()(
       clarificationState: null,
       isClarifying: false,
       isGeneratingQuestions: false,
+
+      // Ollama enhancement initial state
+      isEnhancing: false,
+      enhancingItemId: null,
 
       setHasHydrated: (state) => {
         set({ _hasHydrated: state })
@@ -117,12 +125,53 @@ export const useInboxStore = create<InboxState>()(
           }
 
           await db.inboxItems.add(item)
+
+          // Update state with initial rule-based result
           set((state) => ({
             items: [item, ...state.items],
             isParsing: false,
             currentParsed: parsed,
             currentParsingItemId: null,
+            isEnhancing: true,
+            enhancingItemId: id,
           }))
+
+          // Start async Ollama enhancement (non-blocking)
+          enhanceWithOllama(
+            content,
+            parsed,
+            async (enhanced) => {
+              // Update item in database with enhanced result
+              await db.inboxItems.update(id, {
+                parsed: enhanced,
+                parseAttemptedAt: new Date(),
+              })
+
+              // Update state with enhanced result
+              // Only clear enhancing flags if this is still the active enhancing item
+              set((state) => {
+                const isActiveEnhancement = state.enhancingItemId === id
+                return {
+                  items: state.items.map((i) =>
+                    i.id === id
+                      ? { ...i, parsed: enhanced, parseAttemptedAt: new Date() }
+                      : i
+                  ),
+                  // Only update currentParsed if this is still the active item
+                  currentParsed: isActiveEnhancement ? enhanced : state.currentParsed,
+                  // Only clear flags if this enhancement is still the active one
+                  isEnhancing: isActiveEnhancement ? false : state.isEnhancing,
+                  enhancingItemId: isActiveEnhancement ? null : state.enhancingItemId,
+                }
+              })
+            }
+          ).catch(() => {
+            // Silent failure - only clear if this is still the active enhancement
+            set((state) => {
+              if (state.enhancingItemId !== id) return state
+              return { isEnhancing: false, enhancingItemId: null }
+            })
+          })
 
           return { id, parsed }
         } catch (error) {

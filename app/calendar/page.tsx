@@ -4,13 +4,31 @@ import { useState } from "react"
 import { AppLayout } from "@/components/app-layout"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { ASPECT_CONFIG } from "@/lib/constants"
 import { useTasksStore } from "@/stores/tasks"
 import { useTrainingStore } from "@/stores/training"
 import { useMealsStore } from "@/stores/meals"
 import { useJournalStore } from "@/stores/journal"
 import { formatDate } from "@/db"
-import { ChevronLeft, ChevronRight, Dumbbell, Utensils, BookOpen, ListTodo } from "lucide-react"
+import type { LifeAspect, TimePreference } from "@/lib/types"
+import { ChevronLeft, ChevronRight, Dumbbell, Utensils, BookOpen, ListTodo, Plus } from "lucide-react"
 
 // Format time for display (e.g., "19:00" -> "7pm")
 function formatTime(time: string): string {
@@ -26,7 +44,17 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [view, setView] = useState<"week" | "month">("week")
 
+  // Add task dialog state
+  const [addTaskOpen, setAddTaskOpen] = useState(false)
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [formTitle, setFormTitle] = useState("")
+  const [formAspect, setFormAspect] = useState<LifeAspect>("fitness")
+  const [formTimePreference, setFormTimePreference] = useState<TimePreference>("morning")
+  const [formTime, setFormTime] = useState<string>("") // Specific time (optional)
+  const [formDuration, setFormDuration] = useState("30")
+
   const tasks = useTasksStore((state) => state.tasks)
+  const addTask = useTasksStore((state) => state.addTask)
   const trainingSessions = useTrainingStore((state) => state.sessions)
   const meals = useMealsStore((state) => state.meals)
   const journalEntries = useJournalStore((state) => state.entries)
@@ -74,6 +102,38 @@ export default function CalendarPage() {
 
   const goToToday = () => {
     setCurrentDate(new Date())
+  }
+
+  // Handle day click to add task
+  const handleDayClick = (date: Date, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setSelectedDate(date)
+    setFormTitle("")
+    setFormAspect("fitness")
+    setFormTimePreference("morning")
+    setFormTime("")
+    setFormDuration("30")
+    setAddTaskOpen(true)
+  }
+
+  // Handle task creation
+  const handleAddTask = async () => {
+    if (!formTitle.trim()) return
+
+    await addTask({
+      title: formTitle.trim(),
+      aspect: formAspect,
+      scheduledDate: formatDate(selectedDate),
+      timePreference: formTimePreference,
+      hardScheduledTime: formTime || undefined,
+      durationEstimate: parseInt(formDuration) || 30,
+      status: "pending",
+      deferCount: 0,
+    })
+
+    setAddTaskOpen(false)
+    setFormTitle("")
+    setFormTime("")
   }
 
   // Get data for a specific date
@@ -165,7 +225,7 @@ export default function CalendarPage() {
 
             if (view === "week") {
               return (
-                <Card key={dateStr} className={isToday ? "border-primary" : ""}>
+                <Card key={dateStr} className={`group ${isToday ? "border-primary" : ""}`}>
                   <div className="p-4">
                     <div className="mb-3 flex items-center justify-between">
                       <div>
@@ -174,7 +234,15 @@ export default function CalendarPage() {
                         </div>
                         <div className={`text-2xl font-bold ${isToday ? "text-primary" : ""}`}>{date.getDate()}</div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
+                          onClick={(e) => handleDayClick(date, e)}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
                         {daySessions.length > 0 && (
                           <div className="flex items-center gap-1 text-xs text-orange-500">
                             <Dumbbell className="h-3 w-3" />
@@ -244,9 +312,13 @@ export default function CalendarPage() {
               return (
                 <Card
                   key={dateStr}
-                  className={`min-h-[100px] p-2 ${isToday ? "border-primary" : ""} ${!isCurrentMonth ? "opacity-50" : ""}`}
+                  className={`group min-h-[100px] cursor-pointer p-2 transition-colors hover:bg-muted/50 ${isToday ? "border-primary" : ""} ${!isCurrentMonth ? "opacity-50" : ""}`}
+                  onClick={(e) => handleDayClick(date, e)}
                 >
-                  <div className={`text-sm font-medium ${isToday ? "text-primary" : ""}`}>{date.getDate()}</div>
+                  <div className="flex items-center justify-between">
+                    <div className={`text-sm font-medium ${isToday ? "text-primary" : ""}`}>{date.getDate()}</div>
+                    <Plus className="h-3 w-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                  </div>
                   <div className="mt-1 space-y-1">
                     {dayTasks.slice(0, 2).map((task) => (
                       <div
@@ -279,6 +351,104 @@ export default function CalendarPage() {
             }
           })}
         </div>
+
+        {/* Add Task Dialog */}
+        <Dialog open={addTaskOpen} onOpenChange={setAddTaskOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Add Task</DialogTitle>
+              <DialogDescription>
+                Create a task for {selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Task Title</Label>
+                <Input
+                  value={formTitle}
+                  onChange={(e) => setFormTitle(e.target.value)}
+                  placeholder="What needs to be done?"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && formTitle.trim()) {
+                      handleAddTask()
+                    }
+                  }}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Aspect</Label>
+                  <Select value={formAspect} onValueChange={(v) => setFormAspect(v as LifeAspect)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(ASPECT_CONFIG).map(([aspect, config]) => {
+                        const Icon = config.icon
+                        return (
+                          <SelectItem key={aspect} value={aspect}>
+                            <div className="flex items-center gap-2">
+                              <Icon className="h-4 w-4" style={{ color: config.color }} />
+                              {config.label}
+                            </div>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Time Preference</Label>
+                  <Select value={formTimePreference} onValueChange={(v) => setFormTimePreference(v as TimePreference)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="morning">Morning</SelectItem>
+                      <SelectItem value="afternoon">Afternoon</SelectItem>
+                      <SelectItem value="evening">Evening</SelectItem>
+                      <SelectItem value="anytime">Anytime</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Specific Time (optional)</Label>
+                  <Input
+                    type="time"
+                    value={formTime}
+                    onChange={(e) => setFormTime(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Duration (minutes)</Label>
+                  <Input
+                    type="number"
+                    value={formDuration}
+                    onChange={(e) => setFormDuration(e.target.value)}
+                    placeholder="30"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAddTaskOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleAddTask} disabled={!formTitle.trim()}>
+                Add Task
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppLayout>
   )

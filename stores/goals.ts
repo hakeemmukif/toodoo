@@ -1,7 +1,20 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { db, generateId } from "@/db"
-import type { YearlyGoal, MonthlyGoal, WeeklyGoal, LifeAspect, GoalStatus } from "@/lib/types"
+import type {
+  YearlyGoal,
+  MonthlyGoal,
+  WeeklyGoal,
+  LifeAspect,
+  GoalStatus,
+  GoalType,
+  HabitGoal,
+  MasteryGoal,
+  ProjectGoal,
+  OutcomeGoal,
+  Milestone,
+  SkillLevel,
+} from "@/lib/types"
 
 interface GoalsState {
   yearlyGoals: YearlyGoal[]
@@ -36,6 +49,21 @@ interface GoalsState {
     monthly: MonthlyGoal[]
     weekly: WeeklyGoal[]
   }
+  getGoalsByType: (type: GoalType) => YearlyGoal[]
+
+  // Type-specific actions
+  updateHabitProgress: (goalId: string, completed: boolean) => Promise<void>
+  updateMasteryLevel: (goalId: string, levelId: string, achieved: boolean) => Promise<void>
+  updateMilestoneStatus: (
+    goalId: string,
+    milestoneId: string,
+    status: Milestone["status"]
+  ) => Promise<void>
+  updateOutcomeValue: (goalId: string, currentValue: number) => Promise<void>
+  addPracticeEntry: (
+    goalId: string,
+    entry: { durationMinutes: number; notes?: string; skillLevelId?: string }
+  ) => Promise<void>
 }
 
 export const useGoalsStore = create<GoalsState>()(
@@ -179,6 +207,111 @@ export const useGoalsStore = create<GoalsState>()(
           monthly: state.monthlyGoals.filter((g) => g.aspect === aspect),
           weekly: state.weeklyGoals.filter((g) => g.aspect === aspect),
         }
+      },
+
+      getGoalsByType: (type) => {
+        return get().yearlyGoals.filter((g) => g.goalType === type)
+      },
+
+      // Type-specific actions
+
+      // Habit: Update streak on task completion
+      updateHabitProgress: async (goalId, completed) => {
+        const goal = get().yearlyGoals.find((g) => g.id === goalId)
+        if (!goal?.habit) return
+
+        const habit = { ...goal.habit }
+        if (completed) {
+          habit.currentStreak += 1
+          if (habit.currentStreak > habit.longestStreak) {
+            habit.longestStreak = habit.currentStreak
+          }
+        } else {
+          // Don't reset on single miss, only on double miss ("never miss twice")
+          // This is handled externally based on consecutive misses
+        }
+
+        await get().updateYearlyGoal(goalId, { habit })
+      },
+
+      // Mastery: Mark skill level as achieved
+      updateMasteryLevel: async (goalId, levelId, achieved) => {
+        const goal = get().yearlyGoals.find((g) => g.id === goalId)
+        if (!goal?.mastery) return
+
+        const mastery = { ...goal.mastery }
+        mastery.skillLevels = mastery.skillLevels.map((level) =>
+          level.id === levelId
+            ? { ...level, achieved, achievedAt: achieved ? new Date() : undefined }
+            : level
+        )
+
+        // Update current level to highest achieved
+        const achievedLevels = mastery.skillLevels.filter((l) => l.achieved)
+        mastery.currentLevel = achievedLevels.length > 0
+          ? Math.max(...achievedLevels.map((l) => l.order))
+          : 0
+
+        await get().updateYearlyGoal(goalId, { mastery })
+      },
+
+      // Project: Update milestone status
+      updateMilestoneStatus: async (goalId, milestoneId, status) => {
+        const goal = get().yearlyGoals.find((g) => g.id === goalId)
+        if (!goal?.project) return
+
+        const project = { ...goal.project }
+        project.milestones = project.milestones.map((m) =>
+          m.id === milestoneId
+            ? {
+                ...m,
+                status,
+                completedAt: status === "completed" ? new Date() : undefined,
+              }
+            : m
+        )
+
+        // Update next action to first pending milestone's first unchecked item
+        const nextMilestone = project.milestones.find((m) => m.status === "pending")
+        if (nextMilestone?.checklistItems) {
+          const nextItem = nextMilestone.checklistItems.find((item) => !item.completed)
+          project.nextAction = nextItem?.title
+        }
+
+        await get().updateYearlyGoal(goalId, { project })
+      },
+
+      // Outcome: Update current value
+      updateOutcomeValue: async (goalId, currentValue) => {
+        const goal = get().yearlyGoals.find((g) => g.id === goalId)
+        if (!goal?.outcome) return
+
+        const outcome = { ...goal.outcome, currentValue }
+
+        // Update checkpoint if exists for today
+        const today = new Date().toISOString().split("T")[0]
+        const checkpointIndex = outcome.checkpoints.findIndex((c) => c.date === today)
+        if (checkpointIndex >= 0) {
+          outcome.checkpoints[checkpointIndex].actualValue = currentValue
+        }
+
+        await get().updateYearlyGoal(goalId, { outcome })
+      },
+
+      // Mastery: Add practice entry
+      addPracticeEntry: async (goalId, entry) => {
+        const goal = get().yearlyGoals.find((g) => g.id === goalId)
+        if (!goal?.mastery) return
+
+        const mastery = { ...goal.mastery }
+        const practiceEntry = {
+          id: generateId(),
+          date: new Date().toISOString().split("T")[0],
+          ...entry,
+        }
+        mastery.practiceLog = [...(mastery.practiceLog || []), practiceEntry]
+
+        await get().updateYearlyGoal(goalId, { mastery })
       },
     }),
     {

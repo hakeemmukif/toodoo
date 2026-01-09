@@ -30,6 +30,9 @@ import {
   getMissingFields,
 } from "./confidence-scorer"
 import { matchToGoals } from "./goal-matcher"
+import { parseWithOllama, mergeExtractions } from "./ollama-parser"
+import { checkOllamaConnection } from "@/services/ollama"
+import { generateBreakdown } from "./breakdown-generator"
 
 // Parser configuration
 export interface ParserConfig {
@@ -48,6 +51,9 @@ const DEFAULT_CONFIG: ParserConfig = {
 
 // Current parser version for cache invalidation
 export const PARSER_VERSION = 1
+
+// Callback type for async Ollama enhancement
+export type EnhancementCallback = (enhanced: ParsedResult) => void
 
 /**
  * Main parsing function
@@ -129,6 +135,84 @@ export async function parseInboxItem(
   result.processingTimeMs = performance.now() - startTime
 
   return result
+}
+
+/**
+ * Enhance parsing with Ollama LLM (async, non-blocking)
+ *
+ * Call this after parseInboxItem() returns to enhance results with LLM.
+ * The callback is called with the enhanced result when complete.
+ * Silently fails if Ollama is unavailable or times out.
+ */
+export async function enhanceWithOllama(
+  content: string,
+  ruleResult: ParsedResult,
+  onEnhanced: EnhancementCallback,
+  config: Partial<ParserConfig> = {}
+): Promise<void> {
+  const cfg = { ...DEFAULT_CONFIG, ...config }
+
+  // Check connection first (fast check)
+  const isConnected = await checkOllamaConnection()
+  if (!isConnected) {
+    return // Silent exit - rule-based result already showing
+  }
+
+  try {
+    // Normalize content for LLM (same as rule-based)
+    const normalizedContent = expandMalaysianAbbreviations(content)
+
+    // Call Ollama with timeout
+    const ollamaResult = await parseWithOllama(normalizedContent, ruleResult, {
+      timeout: cfg.ollamaTimeout,
+    })
+
+    if (!ollamaResult) {
+      return // LLM returned nothing useful
+    }
+
+    // Merge with rule-based result (LLM wins if higher confidence)
+    const enhanced = mergeExtractions(ruleResult, ollamaResult)
+
+    // Recalculate confidence with merged data
+    enhanced.overallConfidence = calculateOverallConfidence(enhanced)
+    enhanced.confidenceLevel = getConfidenceLevel(enhanced.overallConfidence)
+
+    // Rebuild suggested task with enhanced data
+    const defaultDate = formatMalaysianDate(getMalaysianDate())
+    enhanced.suggestedTask = buildSuggestedTask(enhanced, defaultDate)
+
+    // Re-match goals with potentially better aspect classification
+    const goalMatchResult = await matchToGoals({
+      aspect: enhanced.intent?.value ?? null,
+      scheduledDate: enhanced.when?.date?.value ?? null,
+      activity: enhanced.what?.value ?? null,
+      location: enhanced.where?.value ?? null,
+    })
+    enhanced.goalMatch = goalMatchResult.bestMatch
+    enhanced.alternativeGoals = goalMatchResult.alternatives
+
+    // Update suggested task with weeklyGoalId if matched
+    if (goalMatchResult.bestMatch) {
+      enhanced.suggestedTask.weeklyGoalId = goalMatchResult.bestMatch.weeklyGoalId
+    }
+
+    // Regenerate breakdown if aspect was enhanced
+    if (enhanced.intent?.value && enhanced.confidenceLevel !== "low") {
+      enhanced.suggestedBreakdown = generateBreakdown(enhanced.intent.value, {
+        time: enhanced.when?.time?.value,
+        location: enhanced.where?.value,
+        timePreference: enhanced.when?.timePreference?.value,
+        totalDuration: enhanced.duration?.value,
+      })
+    }
+
+    // Notify caller with enhanced result
+    onEnhanced(enhanced)
+  } catch (error) {
+    // Silent failure - rule-based result is already showing
+    console.warn("Ollama enhancement failed:", error)
+  }
 }
 
 /**

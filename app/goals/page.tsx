@@ -5,13 +5,15 @@ import { AppLayout } from "@/components/app-layout"
 import { GoalCard } from "@/components/goal-card"
 import { EmptyState } from "@/components/empty-state"
 import { GoalWizardModal } from "@/components/goal-wizard-modal"
+import { QuickGoalModal } from "@/components/quick-goal-modal"
 import { PlanningModal } from "@/components/goal-planning"
 import { Button } from "@/components/ui/button"
 import { ASPECT_CONFIG } from "@/lib/constants"
 import { useGoalsStore } from "@/stores/goals"
 import type { LifeAspect, YearlyGoal, MonthlyGoal, WeeklyGoal } from "@/lib/types"
-import { Target, Plus, Sparkles } from "lucide-react"
+import { Target, Plus, Sparkles, Zap } from "lucide-react"
 import { calculateYearlyProgress, calculateMonthlyProgress, calculateWeeklyProgress } from "@/services/progress"
+import { useToast } from "@/hooks/use-toast"
 
 type GoalLevel = "yearly" | "monthly" | "weekly"
 
@@ -25,12 +27,48 @@ interface GoalWithProgress {
 export default function GoalsPage() {
   const [selectedAspect, setSelectedAspect] = useState<LifeAspect | "all">("all")
   const [wizardOpen, setWizardOpen] = useState(false)
+  const [quickGoalOpen, setQuickGoalOpen] = useState(false)
   const [planningOpen, setPlanningOpen] = useState(false)
   const [goalsWithProgress, setGoalsWithProgress] = useState<GoalWithProgress[]>([])
 
   const yearlyGoals = useGoalsStore((state) => state.yearlyGoals)
   const monthlyGoals = useGoalsStore((state) => state.monthlyGoals)
   const weeklyGoals = useGoalsStore((state) => state.weeklyGoals)
+  const deleteYearlyGoal = useGoalsStore((state) => state.deleteYearlyGoal)
+  const deleteMonthlyGoal = useGoalsStore((state) => state.deleteMonthlyGoal)
+  const deleteWeeklyGoal = useGoalsStore((state) => state.deleteWeeklyGoal)
+  const { toast } = useToast()
+
+  // Handle goal deletion with cascade
+  const handleDeleteGoal = async (yearlyGoalId: string) => {
+    try {
+      // Find linked monthly goals
+      const linkedMonthly = monthlyGoals.filter((mg) => mg.yearlyGoalId === yearlyGoalId)
+
+      // Find and delete linked weekly goals
+      for (const mg of linkedMonthly) {
+        const linkedWeekly = weeklyGoals.filter((wg) => wg.monthlyGoalId === mg.id)
+        for (const wg of linkedWeekly) {
+          await deleteWeeklyGoal(wg.id)
+        }
+        await deleteMonthlyGoal(mg.id)
+      }
+
+      // Delete the yearly goal
+      await deleteYearlyGoal(yearlyGoalId)
+
+      toast({
+        title: "Goal deleted",
+        description: "The goal and its sub-goals have been removed",
+      })
+    } catch (error) {
+      toast({
+        title: "Failed to delete",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
 
   // Build hierarchical goals with progress
   useEffect(() => {
@@ -104,9 +142,13 @@ export default function GoalsPage() {
               <Sparkles className="mr-2 h-4 w-4" />
               Plan with AI
             </Button>
+            <Button variant="outline" onClick={() => setQuickGoalOpen(true)}>
+              <Zap className="mr-2 h-4 w-4" />
+              Quick Goal
+            </Button>
             <Button onClick={() => setWizardOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
-              Add Goal
+              Full Wizard
             </Button>
           </div>
         </div>
@@ -115,6 +157,13 @@ export default function GoalsPage() {
         <GoalWizardModal
           open={wizardOpen}
           onOpenChange={setWizardOpen}
+          defaultAspect={defaultAspect}
+        />
+
+        {/* Quick Goal Modal */}
+        <QuickGoalModal
+          open={quickGoalOpen}
+          onOpenChange={setQuickGoalOpen}
           defaultAspect={defaultAspect}
         />
 
@@ -174,6 +223,7 @@ export default function GoalsPage() {
                   endDate: "",
                   progress,
                 }}
+                onDelete={handleDeleteGoal}
                 children={children.flatMap((c) => [
                   {
                     id: c.goal.id,

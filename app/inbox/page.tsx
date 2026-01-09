@@ -24,7 +24,7 @@ import { ASPECT_CONFIG } from "@/lib/constants"
 import { useInboxStore } from "@/stores/inbox"
 import { useTasksStore } from "@/stores/tasks"
 import type { LifeAspect, TimePreference, InboxItem, Task, TaskBreakdown, ParsedResult, SlotType } from "@/lib/types"
-import { Inbox, Plus, ArrowRight, Trash2, CalendarIcon, Zap, Loader2, Sparkles } from "lucide-react"
+import { Inbox, Plus, ArrowRight, Trash2, CalendarIcon, Zap, Loader2, Sparkles, ChevronDown, ChevronRight } from "lucide-react"
 import { formatDate } from "@/db"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
@@ -51,6 +51,9 @@ export default function InboxPage() {
   const [pendingParsed, setPendingParsed] = useState<ParsedResult | null>(null)
   const [pendingText, setPendingText] = useState<string>("")
 
+  // Recently processed collapse state
+  const [showProcessed, setShowProcessed] = useState(false)
+
   // Process form state
   const [formTitle, setFormTitle] = useState("")
   const [formDescription, setFormDescription] = useState("")
@@ -65,6 +68,8 @@ export default function InboxPage() {
   const items = useInboxStore((state) => state.items)
   const isParsing = useInboxStore((state) => state.isParsing)
   const currentParsed = useInboxStore((state) => state.currentParsed)
+  const isEnhancing = useInboxStore((state) => state.isEnhancing)
+  const enhancingItemId = useInboxStore((state) => state.enhancingItemId)
   const addItemWithParse = useInboxStore((state) => state.addItemWithParse)
   const processItem = useInboxStore((state) => state.processItem)
   const deleteItem = useInboxStore((state) => state.deleteItem)
@@ -412,6 +417,7 @@ export default function InboxPage() {
               <ParsedPreview
                 parsed={currentParsed}
                 originalText={lastCapturedItem.content}
+                isEnhancing={isEnhancing && enhancingItemId === lastCapturedItemId}
                 onConfirm={handleQuickConfirm}
                 onEdit={handleEditFromPreview}
                 onDismiss={handleDismissPreview}
@@ -510,28 +516,40 @@ export default function InboxPage() {
           )}
         </div>
 
-        {/* Recently Processed */}
+        {/* Recently Processed - Collapsible */}
         {processedItems.length > 0 && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-muted-foreground">
-              Recently Processed
-            </h2>
-            <div className="space-y-2">
-              {processedItems.slice(0, 5).map((item) => (
-                <Card key={item.id} className="opacity-50">
-                  <CardContent className="flex items-center justify-between p-4">
-                    <div className="flex-1">
-                      <p className="text-sm line-through">{item.content}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {item.convertedToTaskId && "Converted to task"}
-                        {item.trashedAt && "Discarded"}
-                        {item.convertedToGoalId && "Converted to goal"}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+          <div className="space-y-2">
+            <button
+              onClick={() => setShowProcessed(!showProcessed)}
+              className="flex w-full items-center gap-2 text-left text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showProcessed ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+              <span className="text-sm font-medium">
+                Recently Processed ({processedItems.length})
+              </span>
+            </button>
+            {showProcessed && (
+              <div className="space-y-2 pl-6">
+                {processedItems.slice(0, 5).map((item) => (
+                  <Card key={item.id} className="opacity-50">
+                    <CardContent className="flex items-center justify-between p-4">
+                      <div className="flex-1">
+                        <p className="text-sm line-through">{item.content}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.convertedToTaskId && "Converted to task"}
+                          {item.trashedAt && "Discarded"}
+                          {item.convertedToGoalId && "Converted to goal"}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

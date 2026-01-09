@@ -4,6 +4,11 @@ import type React from "react"
 import { useEffect, useState, useRef } from "react"
 import { useInitializeData } from "@/hooks/use-data"
 import { useAppStore } from "@/stores/app"
+import { useSyncStore } from "@/stores/sync"
+import {
+  initializeSyncOrchestrator,
+  shutdownSyncOrchestrator,
+} from "@/services/sync/orchestrator"
 
 interface ProvidersProps {
   children: React.ReactNode
@@ -14,10 +19,23 @@ export function DataProvider({ children }: ProvidersProps) {
   const [mounted, setMounted] = useState(false)
   const isDataLoaded = useAppStore((state) => state.isDataLoaded)
   const hasShownLoading = useRef(false)
+  const loadSyncIssues = useSyncStore((state) => state.loadIssues)
 
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Initialize sync orchestrator when data is loaded
+  useEffect(() => {
+    if (isDataLoaded && mounted) {
+      initializeSyncOrchestrator()
+      loadSyncIssues()
+
+      return () => {
+        shutdownSyncOrchestrator()
+      }
+    }
+  }, [isDataLoaded, mounted, loadSyncIssues])
 
   // Don't render anything on server to avoid hydration issues with IndexedDB
   if (!mounted) {

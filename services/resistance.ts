@@ -1,4 +1,4 @@
-import type { Task, LifeAspect, ResistanceAnalysis } from "@/lib/types"
+import type { Task, LifeAspect, ResistanceAnalysis, YearlyGoal } from "@/lib/types"
 
 // Group tasks by a key function
 function groupBy<T, K extends string>(items: T[], keyFn: (item: T) => K): Record<K, T[]> {
@@ -160,4 +160,139 @@ export function getResistanceColor(level: "none" | "low" | "medium" | "high"): s
     default:
       return "oklch(0.58 0.08 145)" // sage
   }
+}
+
+/**
+ * Get WOOP-based intervention for high resistance
+ * When a task has been deferred 3+ times, suggest reviewing WOOP plan
+ */
+export function getWOOPIntervention(
+  task: Task,
+  linkedGoal?: YearlyGoal
+): { type: "review_plan" | "identify_obstacle" | "new_plan"; message: string } | null {
+  if (task.deferCount < 3) return null
+
+  // If goal has WOOP data, prompt to review it
+  if (linkedGoal?.woop) {
+    return {
+      type: "review_plan",
+      message: `You've avoided this ${task.deferCount} times. Remember your plan: "${linkedGoal.woop.plan || "Review your if-then plan"}"`,
+    }
+  }
+
+  // If goal has if-then plans, surface them
+  if (linkedGoal?.ifThenPlans && linkedGoal.ifThenPlans.length > 0) {
+    return {
+      type: "review_plan",
+      message: linkedGoal.ifThenPlans[0],
+    }
+  }
+
+  // If no WOOP, suggest identifying the obstacle
+  return {
+    type: "identify_obstacle",
+    message: "What's the obstacle? Name it, then plan around it.",
+  }
+}
+
+/**
+ * Check if habit streak needs protection ("never miss twice")
+ */
+export function checkStreakProtection(
+  goal: YearlyGoal,
+  missedYesterday: boolean
+): { shouldWarn: boolean; message: string } | null {
+  if (goal.goalType !== "habit" || !goal.habit) return null
+
+  // If missed yesterday and current streak was active, show protection message
+  if (missedYesterday && goal.habit.longestStreak > 0) {
+    return {
+      shouldWarn: true,
+      message: "One skip is fine. Don't skip twice. Get back on track today.",
+    }
+  }
+
+  // If on a good streak, encourage continuation
+  if (goal.habit.currentStreak >= 7) {
+    return {
+      shouldWarn: false,
+      message: `${goal.habit.currentStreak} days strong. Keep the momentum.`,
+    }
+  }
+
+  return null
+}
+
+/**
+ * Get identity reinforcement message
+ * Surfaces identity statements at key moments
+ */
+export function getIdentityReinforcement(
+  goal: YearlyGoal,
+  context: "task_start" | "task_complete" | "resistance" | "daily"
+): string | null {
+  if (!goal.identityStatement) return null
+
+  const statement = goal.identityStatement
+
+  switch (context) {
+    case "task_start":
+      return `You're someone who ${statement}. Let's go.`
+    case "task_complete":
+      return `That's what someone who ${statement} does.`
+    case "resistance":
+      return `Remember: You're becoming someone who ${statement}.`
+    case "daily":
+      return `Today's identity: Someone who ${statement}.`
+    default:
+      return null
+  }
+}
+
+/**
+ * Analyze behavioral patterns and generate nudges
+ */
+export function generateBehavioralNudges(
+  tasks: Task[],
+  goals: YearlyGoal[]
+): { type: string; message: string; priority: "high" | "medium" | "low" }[] {
+  const nudges: { type: string; message: string; priority: "high" | "medium" | "low" }[] = []
+
+  // High resistance tasks
+  const highResistance = tasks.filter((t) => t.deferCount >= 3 && t.status === "pending")
+  if (highResistance.length > 0) {
+    nudges.push({
+      type: "resistance",
+      message: `${highResistance.length} task${highResistance.length > 1 ? "s" : ""} with high resistance. Face one today.`,
+      priority: "high",
+    })
+  }
+
+  // Habit goals needing attention
+  const habitGoals = goals.filter((g) => g.goalType === "habit" && g.habit)
+  for (const goal of habitGoals) {
+    if (goal.habit!.currentStreak === 0 && goal.habit!.longestStreak > 3) {
+      nudges.push({
+        type: "streak_broken",
+        message: `Your ${goal.title} streak broke. Restart today to rebuild.`,
+        priority: "medium",
+      })
+    }
+  }
+
+  // Identity reminders for active goals
+  const goalsWithIdentity = goals.filter((g) => g.identityStatement && g.status === "active")
+  if (goalsWithIdentity.length > 0) {
+    const randomGoal = goalsWithIdentity[Math.floor(Math.random() * goalsWithIdentity.length)]
+    nudges.push({
+      type: "identity",
+      message: `Today: Be someone who ${randomGoal.identityStatement}.`,
+      priority: "low",
+    })
+  }
+
+  return nudges.sort((a, b) => {
+    const priorityOrder = { high: 0, medium: 1, low: 2 }
+    return priorityOrder[a.priority] - priorityOrder[b.priority]
+  })
 }
