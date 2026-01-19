@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState } from "react"
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   LayoutDashboard,
   Calendar,
@@ -26,6 +26,9 @@ import {
   Wallet,
   ChevronDown,
   Repeat,
+  Flame,
+  ChefHat,
+  Compass,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -34,6 +37,10 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { GoalWizardModal } from "@/components/goal-wizard-modal"
+import { ExcavationBanner } from "@/components/excavation"
+import { InterruptSheet } from "@/components/pattern-interrupt"
+import { useInterruptTimer } from "@/hooks/use-interrupt-timer"
+import { useInterruptsStore } from "@/stores/interrupts"
 
 interface NavItem {
   href: string
@@ -55,6 +62,7 @@ const coreNavItems: NavItem[] = [
   { href: "/calendar", label: "Calendar", icon: Calendar },
   { href: "/goals", label: "Goals", icon: Target },
   { href: "/tasks", label: "Tasks", icon: ListTodo },
+  { href: "/foundation", label: "Foundation", icon: Compass },
   { href: "/journal", label: "Journal", icon: BookOpen, disabled: true },
 ]
 
@@ -70,12 +78,19 @@ const navSections: NavSection[] = [
     ],
   },
   {
+    title: "Cook",
+    defaultOpen: true,
+    items: [
+      { href: "/recipes?method=air-fryer", label: "Air Fryer", icon: Flame },
+      { href: "/recipes", label: "All Recipes", icon: BookMarked },
+    ],
+  },
+  {
     title: "Organize",
     defaultOpen: false,
     items: [
       { href: "/recurring", label: "Recurring", icon: Repeat },
       { href: "/shopping", label: "Shopping", icon: ShoppingCart, disabled: true },
-      { href: "/recipes", label: "Recipes", icon: BookMarked },
     ],
   },
   {
@@ -91,6 +106,7 @@ const navSections: NavSection[] = [
 const settingsItem: NavItem = { href: "/settings", label: "Settings", icon: Settings }
 
 const quickActions = [
+  { label: "Start Cooking", icon: ChefHat, action: "start-cooking", href: "/recipes?method=air-fryer&tab=session" },
   { label: "Add Goal", icon: Target, action: "add-goal" },
   { label: "Add Task", icon: Plus, action: "add-task", href: "/tasks" },
   { label: "Write Journal", icon: PenLine, action: "write-journal", href: "/journal", disabled: true },
@@ -105,6 +121,26 @@ const mobileBottomNavItems: NavItem[] = [
   { href: "/goals", label: "Goals", icon: Target },
   { href: "/tasks", label: "Tasks", icon: ListTodo },
 ]
+
+// Helper to check if nav item is active (handles query params)
+function isNavItemActive(pathname: string, searchParams: string, itemHref: string): boolean {
+  const [itemPath, itemQuery] = itemHref.split("?")
+
+  // Must match base path
+  if (pathname !== itemPath) return false
+
+  // If item has query params, check if current URL includes them
+  if (itemQuery) {
+    const itemParams = new URLSearchParams(itemQuery)
+    const currentParams = new URLSearchParams(searchParams)
+
+    for (const [key, value] of itemParams.entries()) {
+      if (currentParams.get(key) !== value) return false
+    }
+  }
+
+  return true
+}
 
 function NavLink({ item, isActive, onClick }: { item: NavItem; isActive: boolean; onClick?: () => void }) {
   const Icon = item.icon
@@ -142,16 +178,21 @@ function NavLink({ item, isActive, onClick }: { item: NavItem; isActive: boolean
 function CollapsibleSection({
   section,
   pathname,
+  searchParams,
   openSections,
   onToggle,
 }: {
   section: NavSection
   pathname: string
+  searchParams: string
   openSections: Record<string, boolean>
   onToggle: (title: string) => void
 }) {
   const isOpen = openSections[section.title] ?? section.defaultOpen
-  const hasActiveItem = section.items.some((item) => pathname === item.href)
+  const hasActiveItem = section.items.some((item) => {
+    const [itemPath] = item.href.split("?")
+    return pathname === itemPath
+  })
 
   return (
     <Collapsible open={isOpen || hasActiveItem} onOpenChange={() => onToggle(section.title)}>
@@ -166,7 +207,7 @@ function CollapsibleSection({
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-0.5">
         {section.items.map((item) => (
-          <NavLink key={item.href} item={item} isActive={pathname === item.href} />
+          <NavLink key={item.href} item={item} isActive={isNavItemActive(pathname, searchParams, item.href)} />
         ))}
       </CollapsibleContent>
     </Collapsible>
@@ -176,9 +217,16 @@ function CollapsibleSection({
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const searchParamsObj = useSearchParams()
+  const searchParams = searchParamsObj.toString()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
   const [goalWizardOpen, setGoalWizardOpen] = useState(false)
+
+  // Pattern interrupt timer - checks for due interrupts every minute
+  useInterruptTimer(60000)
+  const currentInterrupt = useInterruptsStore((s) => s.currentInterrupt)
+  const hideInterrupt = useInterruptsStore((s) => s.hideInterrupt)
 
   const handleQuickAction = (action: string, href?: string) => {
     if (action === "add-goal") {
@@ -222,6 +270,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 key={section.title}
                 section={section}
                 pathname={pathname}
+                searchParams={searchParams}
                 openSections={openSections}
                 onToggle={toggleSection}
               />
@@ -289,7 +338,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 pb-20 lg:pb-0">{children}</main>
+      <main className="flex-1 pb-20 lg:pb-0">
+        {/* Daily Excavation Banner - prompts user until completed */}
+        <div className="pt-4">
+          <ExcavationBanner />
+        </div>
+        {children}
+      </main>
 
       {/* Mobile Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-border/60 bg-card/80 backdrop-blur-sm lg:hidden">
@@ -408,6 +463,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       <GoalWizardModal
         open={goalWizardOpen}
         onOpenChange={setGoalWizardOpen}
+      />
+
+      {/* Pattern Interrupt Sheet */}
+      <InterruptSheet
+        interrupt={currentInterrupt}
+        open={currentInterrupt !== null}
+        onOpenChange={(open) => {
+          if (!open) hideInterrupt()
+        }}
       />
     </div>
   )

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { AppLayout } from "@/components/app-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -26,7 +27,11 @@ import { PantryManager } from "@/components/air-fryer/pantry-manager"
 import { SuggestionList } from "@/components/air-fryer/suggestion-list"
 import { RecipeCollection } from "@/components/air-fryer/recipe-collection"
 import { DeviceSettings } from "@/components/air-fryer/device-settings"
+import { SessionBuilder } from "@/components/air-fryer/cooking-session/session-builder"
+import { OptimizationPreview } from "@/components/air-fryer/cooking-session/optimization-preview"
+import { SessionExecutor } from "@/components/air-fryer/cooking-session/session-executor"
 import { OllamaStatusIndicator } from "@/components/inbox/ollama-status"
+import { useCookingSessionStore } from "@/stores/cooking-session"
 import { getSeedAirFryerRecipes } from "@/data/seed-air-fryer-recipes"
 import type { RecipeIngredient } from "@/lib/types"
 import {
@@ -42,6 +47,7 @@ import {
   Sparkles,
   Package,
   BookOpen,
+  ChefHat,
   // Future cooking methods
   // Soup,
   // CookingPot,
@@ -71,8 +77,14 @@ const COOKING_METHODS = [
 type CookingMethod = (typeof COOKING_METHODS)[number]["id"]
 
 export default function RecipesPage() {
-  const [activeMethod, setActiveMethod] = useState<CookingMethod>("all")
-  const [airFryerTab, setAirFryerTab] = useState("suggestions")
+  const searchParams = useSearchParams()
+
+  // Read URL params for initial state - default to air-fryer
+  const methodParam = searchParams.get("method") as CookingMethod | null
+  const tabParam = searchParams.get("tab")
+
+  const [activeMethod, setActiveMethod] = useState<CookingMethod>(methodParam || "air-fryer")
+  const [airFryerTab, setAirFryerTab] = useState(tabParam || "suggestions")
   const [mounted, setMounted] = useState(false)
 
   // All Recipes state
@@ -100,6 +112,7 @@ export default function RecipesPage() {
 
   const { recipes: airFryerRecipes, loadRecipes: loadAirFryerRecipes, addRecipe: addAirFryerRecipe, getSuggestions, loadDevice } = useAirFryerStore()
   const { items: inventoryItems, loadItems: loadInventory } = useInventoryStore()
+  const { currentSession } = useCookingSessionStore()
 
   const { toast } = useToast()
 
@@ -110,6 +123,16 @@ export default function RecipesPage() {
     loadInventory()
     loadDevice()
   }, [loadAirFryerRecipes, loadInventory, loadDevice])
+
+  // Sync state when URL params change (back/forward navigation)
+  useEffect(() => {
+    if (methodParam && methodParam !== activeMethod) {
+      setActiveMethod(methodParam)
+    }
+    if (tabParam && tabParam !== airFryerTab) {
+      setAirFryerTab(tabParam)
+    }
+  }, [methodParam, tabParam])
 
   // Seed air fryer recipes if empty
   useEffect(() => {
@@ -489,7 +512,7 @@ export default function RecipesPage() {
             </div>
 
             <Tabs value={airFryerTab} onValueChange={setAirFryerTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="suggestions" className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4" />
                   <span className="hidden sm:inline">Suggestions</span>
@@ -501,6 +524,10 @@ export default function RecipesPage() {
                 <TabsTrigger value="recipes" className="flex items-center gap-2">
                   <BookOpen className="h-4 w-4" />
                   <span className="hidden sm:inline">Recipes</span>
+                </TabsTrigger>
+                <TabsTrigger value="session" className="flex items-center gap-2">
+                  <ChefHat className="h-4 w-4" />
+                  <span className="hidden sm:inline">Cook Session</span>
                 </TabsTrigger>
               </TabsList>
 
@@ -514,6 +541,19 @@ export default function RecipesPage() {
 
               <TabsContent value="recipes" className="mt-6">
                 <RecipeCollection />
+              </TabsContent>
+
+              <TabsContent value="session" className="mt-6">
+                {/* Show component based on session status */}
+                {!currentSession || currentSession.status === "planning" ? (
+                  <SessionBuilder />
+                ) : currentSession.status === "optimized" ? (
+                  <OptimizationPreview />
+                ) : currentSession.status === "in_progress" ? (
+                  <SessionExecutor />
+                ) : (
+                  <SessionBuilder />
+                )}
               </TabsContent>
             </Tabs>
           </TabsContent>

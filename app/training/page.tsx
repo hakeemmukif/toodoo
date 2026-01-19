@@ -15,10 +15,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useTrainingStore } from "@/stores/training"
 import { formatDate } from "@/db"
 import type { TrainingType, YearlyGoal } from "@/lib/types"
-import { Dumbbell, Flame, Clock, TrendingUp, CalendarIcon, Trash2, Target } from "lucide-react"
+import { Dumbbell, Flame, Clock, TrendingUp, CalendarIcon, Trash2, Target, Zap } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
+import { ActivityBadge } from "@/components/activity-badge"
+import type { LoggingMode } from "@/lib/types"
 
 const trainingTypes: { value: TrainingType; label: string }[] = [
   { value: "muay-thai", label: "Muay Thai" },
@@ -38,6 +40,7 @@ export default function TrainingPage() {
   const [datePickerOpen, setDatePickerOpen] = useState(false)
   const [selectedGoalId, setSelectedGoalId] = useState<string>("")
   const [suggestedGoals, setSuggestedGoals] = useState<YearlyGoal[]>([])
+  const [loggingMode, setLoggingMode] = useState<LoggingMode>("goal-linked")
 
   const sessions = useTrainingStore((state) => state.sessions)
   const addSession = useTrainingStore((state) => state.addSession)
@@ -45,6 +48,8 @@ export default function TrainingPage() {
   const calculateStreak = useTrainingStore((state) => state.calculateStreak)
   const getSessionsForWeek = useTrainingStore((state) => state.getSessionsForWeek)
   const getSuggestedGoalsForSession = useTrainingStore((state) => state.getSuggestedGoalsForSession)
+  const quickLogSession = useTrainingStore((state) => state.quickLogSession)
+  const getStatsWithDistinction = useTrainingStore((state) => state.getStatsWithDistinction)
 
   // Load suggested goals when training type changes
   useEffect(() => {
@@ -69,6 +74,9 @@ export default function TrainingPage() {
   // Training streak
   const streak = calculateStreak()
 
+  // Stats with distinction (goal-linked vs all)
+  const distinctionStats = getStatsWithDistinction()
+
   // Intensity distribution
   const intensityData = [
     { range: "1-3", count: sessions.filter((s) => s.intensity <= 3).length },
@@ -80,14 +88,32 @@ export default function TrainingPage() {
   const handleSaveSession = async () => {
     if (!duration || parseInt(duration) <= 0) return
 
-    await addSession({
-      type,
-      date: formatDate(selectedDate),
-      duration: parseInt(duration),
-      intensity: intensity[0],
-      notes: notes || undefined,
-      linkedGoalId: selectedGoalId || undefined,
-    })
+    if (loggingMode === "quick") {
+      // Quick log - minimal friction, no goal link
+      await quickLogSession(type, parseInt(duration), intensity[0], formatDate(selectedDate))
+      toast({
+        title: "Session logged",
+        description: "Quick log saved. Link to a goal later if needed.",
+      })
+    } else {
+      // Full log with goal linking
+      await addSession({
+        type,
+        date: formatDate(selectedDate),
+        duration: parseInt(duration),
+        intensity: intensity[0],
+        notes: notes || undefined,
+        linkedGoalId: selectedGoalId || undefined,
+      })
+
+      const goalName = suggestedGoals.find((g) => g.id === selectedGoalId)?.title
+      toast({
+        title: "Session logged",
+        description: goalName
+          ? `Linked to goal: ${goalName}`
+          : "Your training session has been saved.",
+      })
+    }
 
     // Reset form
     setDuration("90")
@@ -95,14 +121,6 @@ export default function TrainingPage() {
     setNotes("")
     setSelectedDate(new Date())
     setSelectedGoalId("")
-
-    const goalName = suggestedGoals.find((g) => g.id === selectedGoalId)?.title
-    toast({
-      title: "Session logged",
-      description: goalName
-        ? `Linked to goal: ${goalName}`
-        : "Your training session has been saved.",
-    })
   }
 
   const handleDeleteSession = async (id: string) => {
@@ -125,7 +143,29 @@ export default function TrainingPage() {
         {/* Log Session Card */}
         <Card>
           <CardHeader>
-            <CardTitle>Log Training Session</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Log Training Session</CardTitle>
+              <div className="flex gap-1 rounded-lg bg-muted p-1">
+                <Button
+                  variant={loggingMode === "quick" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setLoggingMode("quick")}
+                >
+                  <Zap className="h-3.5 w-3.5" />
+                  Quick
+                </Button>
+                <Button
+                  variant={loggingMode === "goal-linked" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setLoggingMode("goal-linked")}
+                >
+                  <Target className="h-3.5 w-3.5" />
+                  Goal
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -186,7 +226,7 @@ export default function TrainingPage() {
               </div>
               <Slider value={intensity} onValueChange={setIntensity} min={1} max={10} step={1} />
             </div>
-            {suggestedGoals.length > 0 && (
+            {loggingMode === "goal-linked" && suggestedGoals.length > 0 && (
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   <Target className="h-4 w-4" />
@@ -207,16 +247,23 @@ export default function TrainingPage() {
                 </Select>
               </div>
             )}
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes (optional)</Label>
-              <Textarea
-                id="notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="How did the session go?"
-                rows={3}
-              />
-            </div>
+            {loggingMode === "goal-linked" && (
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes (optional)</Label>
+                <Textarea
+                  id="notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="How did the session go?"
+                  rows={3}
+                />
+              </div>
+            )}
+            {loggingMode === "quick" && (
+              <p className="text-sm text-muted-foreground">
+                Quick log for activity tracking. Link to a goal later if needed.
+              </p>
+            )}
             <Button className="w-full" onClick={handleSaveSession} disabled={!duration || parseInt(duration) <= 0}>
               Save Session
             </Button>
@@ -338,7 +385,10 @@ export default function TrainingPage() {
                         <Dumbbell className="h-5 w-5 text-orange-500" />
                       </div>
                       <div>
-                        <div className="font-medium">{typeLabel}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{typeLabel}</span>
+                          <ActivityBadge countsTowardGoal={!!session.linkedGoalId} size="sm" />
+                        </div>
                         <div className="text-sm text-muted-foreground">
                           {session.duration}m - {dateStr}
                           {session.notes && <span className="ml-2 text-xs">({session.notes.slice(0, 30)}...)</span>}

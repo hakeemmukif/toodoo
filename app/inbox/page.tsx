@@ -23,33 +23,19 @@ import { Badge } from "@/components/ui/badge"
 import { ASPECT_CONFIG } from "@/lib/constants"
 import { useInboxStore } from "@/stores/inbox"
 import { useTasksStore } from "@/stores/tasks"
-import type { LifeAspect, TimePreference, InboxItem, Task, TaskBreakdown, ParsedResult, SlotType } from "@/lib/types"
-import { Inbox, Plus, ArrowRight, Trash2, CalendarIcon, Zap, Loader2, Sparkles, ChevronDown, ChevronRight } from "lucide-react"
+import type { LifeAspect, TimePreference, InboxItem } from "@/lib/types"
+import { Inbox, Plus, ArrowRight, Trash2, CalendarIcon, Zap, Loader2, Sparkles, ChevronDown, ChevronRight, CheckCircle2, Archive } from "lucide-react"
 import { formatDate } from "@/db"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { PrincipleTooltip } from "@/components/principle-tooltip"
-import { ParsedPreview } from "@/components/inbox/parsed-preview"
 import { OllamaStatusIndicator } from "@/components/inbox/ollama-status"
-import { SlotClarificationDialog } from "@/components/inbox/slot-clarification-dialog"
-import { DeepPromptFlow } from "@/components/inbox/deep-prompt-flow"
-import { analyzeSlots } from "@/services/inbox-parser/slot-analyzer"
-import { parseInboxItem } from "@/services/inbox-parser"
-import { getQuestionsForAspect, inferDurationFromAnswers } from "@/services/inbox-parser/deep-prompts"
-import { generateBreakdownFromAnswers } from "@/services/inbox-parser/breakdown-generator"
 
 export default function InboxPage() {
   const [captureText, setCaptureText] = useState("")
   const [processDialogOpen, setProcessDialogOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<InboxItem | null>(null)
   const [datePickerOpen, setDatePickerOpen] = useState(false)
-  const [showParsedPreview, setShowParsedPreview] = useState(false)
-  const [lastCapturedItemId, setLastCapturedItemId] = useState<string | null>(null)
-
-  // Deep prompt state
-  const [showDeepPrompts, setShowDeepPrompts] = useState(false)
-  const [pendingParsed, setPendingParsed] = useState<ParsedResult | null>(null)
-  const [pendingText, setPendingText] = useState<string>("")
 
   // Recently processed collapse state
   const [showProcessed, setShowProcessed] = useState(false)
@@ -67,101 +53,24 @@ export default function InboxPage() {
   // Store state
   const items = useInboxStore((state) => state.items)
   const isParsing = useInboxStore((state) => state.isParsing)
-  const currentParsed = useInboxStore((state) => state.currentParsed)
-  const isEnhancing = useInboxStore((state) => state.isEnhancing)
-  const enhancingItemId = useInboxStore((state) => state.enhancingItemId)
   const addItemWithParse = useInboxStore((state) => state.addItemWithParse)
   const processItem = useInboxStore((state) => state.processItem)
   const deleteItem = useInboxStore((state) => state.deleteItem)
-  const setCurrentParsed = useInboxStore((state) => state.setCurrentParsed)
   const addTask = useTasksStore((state) => state.addTask)
-
-  // Clarification state
-  const clarificationState = useInboxStore((state) => state.clarificationState)
-  const isClarifying = useInboxStore((state) => state.isClarifying)
-  const isGeneratingQuestions = useInboxStore((state) => state.isGeneratingQuestions)
-  const startClarification = useInboxStore((state) => state.startClarification)
-  const updateClarificationAnswer = useInboxStore((state) => state.updateClarificationAnswer)
-  const submitClarifications = useInboxStore((state) => state.submitClarifications)
-  const cancelClarification = useInboxStore((state) => state.cancelClarification)
-  const skipClarification = useInboxStore((state) => state.skipClarification)
 
   const unprocessedItems = items.filter((item) => !item.processedAt)
   const processedItems = items.filter((item) => item.processedAt)
 
+  // GTD-style capture: just parse and add to inbox list
+  // Processing (deep prompts, preview, task creation) happens when user clicks "Process"
   const handleCapture = useCallback(async () => {
     if (!captureText.trim()) return
-
     const text = captureText.trim()
     setCaptureText("")
 
-    // Parse the text first
-    const parsed = await parseInboxItem(text)
-
-    // Analyze slots to check for missing required fields
-    const analysis = analyzeSlots(parsed)
-
-    if (analysis.canProceed) {
-      // All slots filled - check if we should show deep prompts
-      const aspect = parsed.intent?.value
-      const aspectConfidence = parsed.intent?.confidence || 0
-
-      // Show deep prompts if aspect is detected with decent confidence
-      if (aspect && aspectConfidence >= 0.5) {
-        const questions = getQuestionsForAspect(aspect)
-        if (questions.length > 0) {
-          // Store parsed result and show deep prompts
-          setPendingParsed(parsed)
-          setPendingText(text)
-          setShowDeepPrompts(true)
-          return
-        }
-      }
-
-      // No deep prompts needed - proceed with normal flow
-      const { id } = await addItemWithParse(text)
-      setLastCapturedItemId(id)
-
-      // Show parsed preview for quick confirm
-      if (parsed) {
-        setShowParsedPreview(true)
-      }
-    } else {
-      // Missing required slots - start clarification flow
-      await startClarification(text, parsed)
-    }
-  }, [captureText, addItemWithParse, startClarification])
-
-  // Handle clarification submission
-  const handleClarificationSubmit = useCallback(async () => {
-    const { parsed, canProceed } = await submitClarifications()
-
-    if (canProceed && clarificationState) {
-      // All slots now filled - create the item and show preview
-      const { id } = await addItemWithParse(clarificationState.originalText)
-      setLastCapturedItemId(id)
-
-      // Update the item's parsed data with the merged result
-      const item = items.find(i => i.id === id)
-      if (item) {
-        item.parsed = parsed
-      }
-
-      setCurrentParsed(parsed)
-      setShowParsedPreview(true)
-    }
-  }, [submitClarifications, addItemWithParse, clarificationState, items, setCurrentParsed])
-
-  // Handle skipping clarification
-  const handleSkipClarification = useCallback(async () => {
-    const { id, parsed } = await skipClarification()
-    if (id) {
-      setLastCapturedItemId(id)
-      if (parsed) {
-        setShowParsedPreview(true)
-      }
-    }
-  }, [skipClarification])
+    // Parse and add to inbox - item stays as unprocessed for later processing
+    await addItemWithParse(text)
+  }, [captureText, addItemWithParse])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -169,124 +78,6 @@ export default function InboxPage() {
       handleCapture()
     }
   }
-
-  const handleQuickConfirm = async (taskData: Partial<Task>, breakdown?: TaskBreakdown) => {
-    if (!lastCapturedItemId) return
-
-    // Create task with breakdown
-    const taskId = await addTask({
-      title: taskData.title || "Untitled Task",
-      aspect: taskData.aspect || "chores",
-      scheduledDate: taskData.scheduledDate || formatDate(new Date()),
-      timePreference: taskData.timePreference || "anytime",
-      hardScheduledTime: taskData.hardScheduledTime, // Include specific time
-      status: "pending",
-      deferCount: 0,
-      description: taskData.description,
-      durationEstimate: taskData.durationEstimate,
-      location: taskData.location,
-      weeklyGoalId: taskData.weeklyGoalId, // Include goal link
-      who: taskData.who || "solo", // WHO - defaults to solo
-      whoType: taskData.whoType || "solo", // WHO type
-      breakdown,
-    })
-
-    // Mark inbox item as processed
-    await processItem(lastCapturedItemId, "task", taskId)
-
-    // Reset state
-    setShowParsedPreview(false)
-    setCurrentParsed(null)
-    setLastCapturedItemId(null)
-  }
-
-  const handleDismissPreview = () => {
-    setShowParsedPreview(false)
-    setCurrentParsed(null)
-    // Keep the item in inbox for manual processing
-  }
-
-  const handleEditFromPreview = () => {
-    // Open the full form with pre-filled values
-    const item = items.find((i) => i.id === lastCapturedItemId)
-    if (item) {
-      openProcessDialog(item)
-    }
-    setShowParsedPreview(false)
-  }
-
-  // Handle deep prompt completion - generate personalized breakdown
-  const handleDeepPromptComplete = useCallback(async (answers: Record<string, string>) => {
-    if (!pendingParsed || !pendingText) return
-
-    const aspect = pendingParsed.intent?.value
-    if (!aspect) {
-      // Fallback to normal flow
-      setShowDeepPrompts(false)
-      const { id } = await addItemWithParse(pendingText)
-      setLastCapturedItemId(id)
-      setShowParsedPreview(true)
-      setPendingParsed(null)
-      setPendingText("")
-      return
-    }
-
-    // Infer duration from answers if not explicitly set
-    const inferredDuration = inferDurationFromAnswers(aspect, answers)
-
-    // Generate personalized breakdown from answers
-    const breakdown = generateBreakdownFromAnswers(aspect, answers, {
-      time: pendingParsed.when?.time?.value,
-      location: pendingParsed.where?.value,
-      timePreference: pendingParsed.when?.timePreference?.value,
-      totalDuration: pendingParsed.duration?.value || inferredDuration,
-    })
-
-    // Update parsed result with new breakdown and duration
-    const enhancedParsed: ParsedResult = {
-      ...pendingParsed,
-      suggestedBreakdown: breakdown,
-      suggestedTask: {
-        ...pendingParsed.suggestedTask,
-        durationEstimate: pendingParsed.duration?.value || inferredDuration,
-      },
-      duration: {
-        value: pendingParsed.duration?.value || inferredDuration,
-        confidence: pendingParsed.duration?.confidence || 0.8,
-        source: "rule",
-        rawMatch: pendingParsed.duration?.rawMatch || `${inferredDuration} min`,
-      },
-    }
-
-    // Add to inbox with enhanced parsed data
-    const { id } = await addItemWithParse(pendingText)
-    setLastCapturedItemId(id)
-    setCurrentParsed(enhancedParsed)
-
-    // Hide deep prompts, show preview
-    setShowDeepPrompts(false)
-    setShowParsedPreview(true)
-    setPendingParsed(null)
-    setPendingText("")
-  }, [pendingParsed, pendingText, addItemWithParse, setCurrentParsed])
-
-  // Handle deep prompt skip - use default breakdown
-  const handleDeepPromptSkip = useCallback(async () => {
-    if (!pendingParsed || !pendingText) {
-      setShowDeepPrompts(false)
-      return
-    }
-
-    // Proceed with normal flow without personalized breakdown
-    const { id } = await addItemWithParse(pendingText)
-    setLastCapturedItemId(id)
-    setCurrentParsed(pendingParsed)
-
-    setShowDeepPrompts(false)
-    setShowParsedPreview(true)
-    setPendingParsed(null)
-    setPendingText("")
-  }, [pendingParsed, pendingText, addItemWithParse, setCurrentParsed])
 
   const openProcessDialog = (item: InboxItem) => {
     setSelectedItem(item)
@@ -351,32 +142,29 @@ export default function InboxPage() {
     setSelectedItem(null)
   }
 
-  // Get the last captured item for preview
-  const lastCapturedItem = items.find((i) => i.id === lastCapturedItemId)
-
   return (
     <AppLayout>
       <div className="container max-w-4xl space-y-6 p-4 md:p-6 lg:p-8">
         {/* Header */}
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Inbox</h1>
-            <p className="text-muted-foreground">
-              <PrincipleTooltip principle="start-small">
-                Capture thoughts quickly, process them later
-              </PrincipleTooltip>
-            </p>
-          </div>
-          <OllamaStatusIndicator variant="badge" />
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Inbox</h1>
+          <p className="text-muted-foreground">
+            <PrincipleTooltip principle="start-small">
+              Capture thoughts quickly, process them later
+            </PrincipleTooltip>
+          </p>
         </div>
 
         {/* Quick Capture */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Zap className="h-4 w-4" />
-              Quick Capture
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Zap className="h-4 w-4" />
+                Quick Capture
+              </CardTitle>
+              <OllamaStatusIndicator variant="badge" />
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex gap-2">
@@ -400,70 +188,86 @@ export default function InboxPage() {
             <p className="text-xs text-muted-foreground">
               Try natural language: "meeting tomorrow morning at office" or "cook dinner tonight"
             </p>
-
-            {/* Deep Prompt Flow - shows when aspect is detected */}
-            {showDeepPrompts && pendingParsed?.intent?.value && (
-              <DeepPromptFlow
-                aspect={pendingParsed.intent.value}
-                questions={getQuestionsForAspect(pendingParsed.intent.value)}
-                onComplete={handleDeepPromptComplete}
-                onSkip={handleDeepPromptSkip}
-                className="mt-4"
-              />
-            )}
-
-            {/* Parsed Preview - shows after capture (or after deep prompts) */}
-            {showParsedPreview && currentParsed && lastCapturedItem && (
-              <ParsedPreview
-                parsed={currentParsed}
-                originalText={lastCapturedItem.content}
-                isEnhancing={isEnhancing && enhancingItemId === lastCapturedItemId}
-                onConfirm={handleQuickConfirm}
-                onEdit={handleEditFromPreview}
-                onDismiss={handleDismissPreview}
-                className="mt-4"
-              />
-            )}
           </CardContent>
         </Card>
 
-        {/* Unprocessed Items */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">
-              To Process
-              {unprocessedItems.length > 0 && (
-                <Badge variant="secondary" className="ml-2">
-                  {unprocessedItems.length}
-                </Badge>
-              )}
-            </h2>
+        {/* Quick Stats */}
+        {items.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Card>
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/20">
+                  <Inbox className="h-5 w-5 text-blue-500" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{unprocessedItems.length}</div>
+                  <div className="text-xs text-muted-foreground">Pending</div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/20">
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{processedItems.length}</div>
+                  <div className="text-xs text-muted-foreground">Processed</div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20">
+                  <Zap className="h-5 w-5 text-amber-500" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{items.length}</div>
+                  <div className="text-xs text-muted-foreground">Total</div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
+        )}
 
-          {unprocessedItems.length === 0 ? (
-            <EmptyState
-              icon={Inbox}
-              title="Inbox Zero"
-              description="All caught up! Capture new thoughts above."
-            />
-          ) : (
-            <div className="space-y-2">
+        {/* Unprocessed Items */}
+        {unprocessedItems.length === 0 ? (
+          <EmptyState
+            icon={Inbox}
+            title="Inbox Zero"
+            description="All caught up! Capture new thoughts above."
+          />
+        ) : (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>To Process</CardTitle>
+                <Badge variant="secondary">
+                  {unprocessedItems.length} item{unprocessedItems.length !== 1 ? 's' : ''}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
               {unprocessedItems.map((item) => (
-                <Card key={item.id} className="group">
-                  <CardContent className="flex items-center justify-between p-4">
-                    <div className="flex-1">
+                <div
+                  key={item.id}
+                  className="group flex items-center justify-between rounded-lg border border-border p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
+                      <Inbox className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <p className="font-medium">{item.content}</p>
+                        <span className="font-medium truncate">{item.content}</span>
                         {item.parsed?.parsingMethod === "hybrid" && (
-                          <span title="AI enhanced">
-                            <Sparkles className="h-3 w-3 text-purple-500" />
-                          </span>
+                          <Sparkles className="h-3 w-3 shrink-0 text-purple-500" />
                         )}
                       </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(item.capturedAt), "PPp")}
-                        </p>
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        <span className="text-sm text-muted-foreground">
+                          {format(new Date(item.capturedAt), "MMM d, h:mm a")}
+                        </span>
                         {item.parsed && (
                           <Badge
                             variant="outline"
@@ -474,7 +278,7 @@ export default function InboxPage() {
                               item.parsed.confidenceLevel === "low" && "border-red-500/50 text-red-700 dark:text-red-400"
                             )}
                           >
-                            {item.parsed.confidenceLevel} confidence
+                            {item.parsed.confidenceLevel}
                           </Badge>
                         )}
                         {item.parsed?.intent?.value && (
@@ -491,66 +295,83 @@ export default function InboxPage() {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openProcessDialog(item)}
-                      >
-                        <ArrowRight className="mr-1 h-4 w-4" />
-                        Process
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        onClick={() => handleDelete(item.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openProcessDialog(item)}
+                    >
+                      <ArrowRight className="mr-1 h-4 w-4" />
+                      Process
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => handleDelete(item.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
               ))}
-            </div>
-          )}
-        </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Recently Processed - Collapsible */}
         {processedItems.length > 0 && (
-          <div className="space-y-2">
-            <button
-              onClick={() => setShowProcessed(!showProcessed)}
-              className="flex w-full items-center gap-2 text-left text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {showProcessed ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-              <span className="text-sm font-medium">
-                Recently Processed ({processedItems.length})
-              </span>
-            </button>
+          <Card>
+            <CardHeader className="pb-3">
+              <button
+                onClick={() => setShowProcessed(!showProcessed)}
+                className="flex w-full items-center justify-between text-left"
+              >
+                <CardTitle className="text-base">Recently Processed</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {processedItems.length}
+                  </Badge>
+                  {showProcessed ? (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </div>
+              </button>
+            </CardHeader>
             {showProcessed && (
-              <div className="space-y-2 pl-6">
+              <CardContent className="space-y-2 pt-0">
                 {processedItems.slice(0, 5).map((item) => (
-                  <Card key={item.id} className="opacity-50">
-                    <CardContent className="flex items-center justify-between p-4">
-                      <div className="flex-1">
-                        <p className="text-sm line-through">{item.content}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.convertedToTaskId && "Converted to task"}
-                          {item.trashedAt && "Discarded"}
-                          {item.convertedToGoalId && "Converted to goal"}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/30 p-3"
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-500/10">
+                      {item.convertedToTaskId ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      ) : item.trashedAt ? (
+                        <Trash2 className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Archive className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-muted-foreground line-through truncate">
+                        {item.content}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.convertedToTaskId && "Converted to task"}
+                        {item.trashedAt && "Discarded"}
+                        {item.convertedToGoalId && "Converted to goal"}
+                      </p>
+                    </div>
+                  </div>
                 ))}
-              </div>
+              </CardContent>
             )}
-          </div>
+          </Card>
         )}
 
         {/* Process Dialog */}
@@ -581,10 +402,7 @@ export default function InboxPage() {
                       {Math.round(selectedItem.parsed.overallConfidence * 100)}% parsed
                     </Badge>
                     {selectedItem.parsed.parsingMethod === "hybrid" && (
-                      <span className="flex items-center gap-1 text-xs text-purple-600">
-                        <Sparkles className="h-3 w-3" />
-                        AI enhanced
-                      </span>
+                      <Sparkles className="h-3 w-3 text-purple-500" />
                     )}
                   </div>
                 )}
@@ -729,17 +547,6 @@ export default function InboxPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
-        {/* Slot Clarification Dialog */}
-        <SlotClarificationDialog
-          open={isClarifying}
-          state={clarificationState}
-          isGenerating={isGeneratingQuestions}
-          onAnswerChange={updateClarificationAnswer}
-          onSubmit={handleClarificationSubmit}
-          onCancel={cancelClarification}
-          onSkip={handleSkipClarification}
-        />
       </div>
     </AppLayout>
   )

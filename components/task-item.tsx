@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { AspectBadge } from "@/components/aspect-badge"
@@ -14,12 +14,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import type { Task } from "@/lib/types"
+import { VisionAlignmentModal } from "@/components/vision-alignment-modal"
+import type { Task, YearlyGoal } from "@/lib/types"
 import { MoreHorizontal, Calendar as CalendarIcon, Trash2, SkipForward } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTasksStore } from "@/stores/tasks"
 import { useAppStore } from "@/stores/app"
+import { useGoalsStore } from "@/stores/goals"
+import { useVisionStore } from "@/stores/vision"
 import { formatDate } from "@/db"
+import { toast } from "sonner"
 
 interface TaskItemProps {
   task: Task
@@ -28,12 +32,47 @@ interface TaskItemProps {
 
 export function TaskItem({ task, showDate = false }: TaskItemProps) {
   const [deferOpen, setDeferOpen] = useState(false)
+  const [alignmentModalOpen, setAlignmentModalOpen] = useState(false)
+  const [pendingDeferDate, setPendingDeferDate] = useState<string | null>(null)
+  const [linkedYearlyGoal, setLinkedYearlyGoal] = useState<YearlyGoal | undefined>()
+
   const completeTask = useTasksStore((state) => state.completeTask)
   const skipTask = useTasksStore((state) => state.skipTask)
   const deferTask = useTasksStore((state) => state.deferTask)
   const updateTask = useTasksStore((state) => state.updateTask)
   const deleteTask = useTasksStore((state) => state.deleteTask)
   const coachTone = useAppStore((state) => state.settings?.coachTone ?? "balanced")
+
+  // Goal hierarchy access
+  const weeklyGoals = useGoalsStore((state) => state.weeklyGoals)
+  const monthlyGoals = useGoalsStore((state) => state.monthlyGoals)
+  const yearlyGoals = useGoalsStore((state) => state.yearlyGoals)
+
+  // Vision access
+  const visionSnippet = useVisionStore((state) => state.getVisionSnippet())
+
+  // Find linked yearly goal through the hierarchy
+  useEffect(() => {
+    if (!task.weeklyGoalId) {
+      setLinkedYearlyGoal(undefined)
+      return
+    }
+
+    const weeklyGoal = weeklyGoals.find((g) => g.id === task.weeklyGoalId)
+    if (!weeklyGoal?.monthlyGoalId) {
+      setLinkedYearlyGoal(undefined)
+      return
+    }
+
+    const monthlyGoal = monthlyGoals.find((g) => g.id === weeklyGoal.monthlyGoalId)
+    if (!monthlyGoal?.yearlyGoalId) {
+      setLinkedYearlyGoal(undefined)
+      return
+    }
+
+    const yearlyGoal = yearlyGoals.find((g) => g.id === monthlyGoal.yearlyGoalId)
+    setLinkedYearlyGoal(yearlyGoal)
+  }, [task.weeklyGoalId, weeklyGoals, monthlyGoals, yearlyGoals])
 
   const handleComplete = async () => {
     if (task.status === "done") {
@@ -49,10 +88,51 @@ export function TaskItem({ task, showDate = false }: TaskItemProps) {
   }
 
   const handleDefer = async (date: Date | undefined) => {
-    if (date) {
-      await deferTask(task.id, formatDate(date))
+    if (!date) return
+    const newDate = formatDate(date)
+
+    // Check if this defer would reach threshold (deferCount >= 2 means next defer is 3rd)
+    if (task.deferCount >= 2) {
+      setPendingDeferDate(newDate)
+      setAlignmentModalOpen(true)
       setDeferOpen(false)
+      return
     }
+
+    await deferTask(task.id, newDate)
+    setDeferOpen(false)
+  }
+
+  // Vision alignment handlers
+  const handleAligned = async () => {
+    if (!pendingDeferDate) return
+    await deferTask(task.id, pendingDeferDate)
+
+    if (task.minimumVersion) {
+      toast.info(`Try the minimum version: "${task.minimumVersion}"`)
+    } else {
+      toast.info("Consider doing just 5 minutes. Start smaller.")
+    }
+    setPendingDeferDate(null)
+  }
+
+  const handleNotAligned = async () => {
+    await updateTask(task.id, {
+      status: "skipped",
+      resistanceNote: "Archived: Not aligned with vision",
+    })
+    toast.success("Task archived. Focus on what truly matters.")
+    setPendingDeferDate(null)
+  }
+
+  const handleUncertain = async () => {
+    if (!pendingDeferDate) return
+    await deferTask(task.id, pendingDeferDate)
+    await updateTask(task.id, {
+      resistanceNote: "Alignment uncertain - needs reflection",
+    })
+    toast.info("Consider today's excavation to clarify direction.")
+    setPendingDeferDate(null)
   }
 
   const handleDelete = async () => {
@@ -190,6 +270,18 @@ export function TaskItem({ task, showDate = false }: TaskItemProps) {
           </p>
         )}
       </div>
+
+      {/* Vision Alignment Modal - appears on 3rd defer */}
+      <VisionAlignmentModal
+        open={alignmentModalOpen}
+        onOpenChange={setAlignmentModalOpen}
+        task={task}
+        linkedGoal={linkedYearlyGoal}
+        visionSnippet={visionSnippet}
+        onAligned={handleAligned}
+        onNotAligned={handleNotAligned}
+        onUncertain={handleUncertain}
+      />
     </div>
   )
 }

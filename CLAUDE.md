@@ -1,56 +1,39 @@
-# CLAUDE.md - Life Tracker App
+# CLAUDE.md - Toodoo Life Tracker
 
-## User Context
-
-Software engineer in Malaysia: trains muay thai, DJs (French house, Nu Disco), works in fintech. Prefers direct communication. Values simple systems that get used. Wants to cook more, track savings (not budgeting).
-
-**App vibe**: Personal coach, not corporate productivity tool.
-
----
-
-## Core Philosophy
-
-- **Offline-first**: All features work without internet. Data in IndexedDB via Dexie.js.
-- **Local data ownership**: No backend. Export/import JSON via settings.
-- **Principle-driven**: Productivity principles baked in invisibly (user never sees book/author names).
-- **Ollama optional**: AI features gracefully degrade when unavailable.
+## Overview
+**Personal coach app** for a Malaysian software engineer (muay thai, DJing, fintech). Offline-first, no backend, productivity principles baked in invisibly. Combines psychological excavation with daily task management — the "why" layer above the "what."
 
 ---
 
 ## Tech Stack
-
-- **Framework**: Next.js 16 (App Router) + React 19 + TypeScript
-- **Styling**: Tailwind CSS v4 (`@tailwindcss/postcss`)
-- **Storage**: IndexedDB via Dexie.js
-- **State**: Zustand
-- **UI**: shadcn/ui (Radix), React Hook Form + Zod, Recharts, Lucide icons
-- **Analysis**: `sentiment` npm package (in-browser)
-- **LLM**: Ollama at localhost:11434 (optional)
+Next.js 16 + React 19 + TypeScript | Tailwind v4 | Dexie.js (IndexedDB) | Zustand | shadcn/ui | React Three Fiber (lazy) | Ollama (optional)
 
 ---
 
 ## Critical Rules
 
-### NO BOOK/AUTHOR REFERENCES IN UI
-User never sees "Atomic Habits", "Essentialism", "Deep Work", "Goggins", etc. Principles work invisibly.
+1. **NO BOOK/AUTHOR REFERENCES IN UI** - User never sees "Atomic Habits", "Deep Work", "Dan Koe", etc. Principles work invisibly.
+2. **NO CO-AUTHORED-BY IN COMMITS** - Keep commits clean.
+3. **Run `npx tsc --noEmit` before committing**
 
-| User Sees | Internal Principle |
-|-----------|-------------------|
-| "Skipped 3 times. What's blocking you?" | Resistance tracking |
-| "Can't do full thing? 10-minute version?" | Minimum version fallback |
-| "23 days strong. One skip is fine, don't skip twice." | Never miss twice |
-| "Is this a hell yes?" | Forced commitment check |
-| "Deep focus: 3.2 hours" | Focus depth tracking |
-| "What's the ONE thing?" | Priority forcing |
-
-### NO CO-AUTHORED-BY IN COMMITS
-Never add "Co-Authored-By: Claude" or any AI attribution to git commits. Keep commits clean.
-
-### Key Behavioral Thresholds
+### Behavioral Thresholds
 - `deferCount >= 2`: Show resistance indicator
-- `deferCount >= 3`: Prompt for resistanceNote
-- Streaks: Track "days since double-miss" not just current streak
+- `deferCount >= 3`: Prompt for resistanceNote + vision alignment check
 - Goals: Forced unique priority ranking (no ties)
+- YearlyGoal creation: Requires linking to active LifeVision
+
+---
+
+## Core Concept: The Hierarchy
+```
+LifeVision (why — the psychological foundation)
+  → YearlyGoal (what — links to visionId)
+    → MonthlyGoal (project / "boss fight")
+      → WeeklyGoal
+        → Task (daily actions)
+```
+
+The app tracks **what** and **when**. The vision layer provides the **why** — making goals stick by connecting them to identity.
 
 ---
 
@@ -61,168 +44,216 @@ Never add "Co-Authored-By: Claude" or any AI attribution to git commits. Keep co
 type LifeAspect = 'fitness' | 'nutrition' | 'career' | 'financial' | 'side-projects' | 'chores';
 ```
 
-### Goal Hierarchy
-YearlyGoal → MonthlyGoal → WeeklyGoal → Task
-
-Progress bubbles up: task completion → weekly → monthly → yearly progress.
-
-### Key Fields (see `lib/types.ts` for full interfaces)
-
-**Task behavioral fields:**
-- `minimumVersion?: string` - "Can't do full task? Do this instead"
-- `deferCount: number` - Track avoidance (default 0)
-- `resistanceNote?: string` - Why is this hard?
-- `isHardThing?: boolean` - Mark difficult tasks
-
-**YearlyGoal behavioral fields:**
-- `priority: number` - Forced unique ranking
-- `isHellYes?: boolean` - Commitment check
-- `identityStatement?: string` - "Become someone who..."
-
-**ScheduleBlock:**
-- `depth: 'deep' | 'shallow' | 'recovery'` - Focus tracking
-
-**JournalEntry:**
-- `energyLevel?: number` (1-5), `sleepQuality?: number` (1-5)
-- `promptCategory?: string` - Internal only, never shown to user
-
-**TrainingType:** `'muay-thai' | 'cardio' | 'strength' | 'flexibility' | 'dj-practice' | 'other'`
-
-### Date Formats
-- `scheduledDate`: `"2025-01-15"` (date only string)
-- `timestamp`: Full `Date` object
-- `week`: `"2025-W03"` format
-- `month`: `"2025-01"` format
-
----
-
-## Intelligent Inbox
-
-Natural language parsing for quick task capture. Extracts WHO, WHAT, WHEN, WHERE from text input and generates START-MIDDLE-END task breakdowns.
-
-### Example Flow
-```
-Input: "training today at 7pm bunker kota damansara"
-Output:
-  - what: "Training" (0.95)
-  - when: date="2026-01-07", time="19:00" (0.98)
-  - where: "The Bunker, Kota Damansara" (0.95)
-  - aspect: "fitness" (0.92)
-  - breakdown: Warm up → Main session → Cool down
-```
-
-### Parsing Architecture
-
-**Services** (`services/inbox-parser/`):
-| File | Purpose |
-|------|---------|
-| `index.ts` | Main orchestrator, combines all extractors |
-| `entity-extractors/date-extractor.ts` | Relative/absolute date parsing |
-| `entity-extractors/time-extractor.ts` | Time and duration parsing |
-| `malaysian-context.ts` | Local locations and abbreviations |
-| `intent-classifier.ts` | LifeAspect classification |
-| `confidence-scorer.ts` | Confidence calculation and auto-fill decisions |
-| `breakdown-generator.ts` | START-MIDDLE-END task structure |
-| `ollama-parser.ts` | LLM enhancement when available |
-
-### Malaysian Context
-
-**Abbreviations auto-expanded:**
-- `kd` → "Kota Damansara"
-- `pj` → "Petaling Jaya"
-- `bunker` → "The Bunker" (gym)
-- `tmr`/`esok` → tomorrow
-
-**Known locations:** Bunker KD, Celebrity Fitness, FF 24, Jaya Grocer, Village Grocer, etc.
-
-### Confidence Levels
-
-| Level | Score | Action |
-|-------|-------|--------|
-| High | >= 0.80 | Quick confirm (one-tap create) |
-| Medium | 0.50-0.79 | Suggest with review |
-| Low | < 0.50 | Manual entry required |
-
-### Task Breakdown (Implementation Intentions)
-
-Based on Gollwitzer's research: "When X, I will Y at Z" format.
-
-**Structure per aspect:**
+### Vision Layer (Foundation)
 ```typescript
-// fitness breakdown
-{
-  trigger: "When it's 7pm and I arrive at Bunker",
-  steps: [
-    { title: "Warm up", duration: 15 },
-    { title: "Main session", duration: 60 },
-    { title: "Cool down & stretch", duration: 15 }
-  ],
-  completionCriteria: "Training session completed",
-  environmentalCue: "Gym bag packed by door"
+interface LifeVision {
+  id: string;
+
+  // Anti-Vision (the life you refuse to live)
+  antiVision: string;              // One sentence compression
+  antiVisionDetailed: string;      // "Average Tuesday in 10 years" exercise
+
+  // Vision (the life you're building toward)
+  vision: string;                  // One sentence compression
+  visionDetailed: string;          // "Ideal Tuesday in 3 years" exercise
+
+  // Identity
+  identityStatement: string;       // "I am the type of person who..."
+  identityBeliefs: string[];       // What you'd have to believe for vision to feel natural
+
+  // Constraints (the rules of your game)
+  constraints: string[];           // What you won't sacrifice
+
+  // Meta
+  createdAt: Date;
+  updatedAt: Date;
+  isActive: boolean;               // Only one active vision at a time
+}
+
+interface ExcavationSession {
+  id: string;
+  visionId: string;                // Links to the vision this created/updated
+  phase: 'morning' | 'day' | 'evening';
+  completedAt?: Date;
+
+  // Stores all prompt responses
+  responses: {
+    promptId: string;
+    question: string;
+    answer: string;
+    answeredAt: Date;
+  }[];
+
+  // AI-extracted or user-tagged insights
+  insights: string[];
+}
+
+interface PatternInterrupt {
+  id: string;
+  question: string;                // The contemplation question
+  scheduledFor: Date;
+  isRandom: boolean;               // Random time vs fixed schedule
+
+  // Response
+  response?: string;
+  respondedAt?: Date;
+  skipped: boolean;
+
+  // Connection to vision
+  alignmentCheck?: 'toward-vision' | 'toward-anti-vision' | 'neutral';
 }
 ```
 
+### Goal Hierarchy
+
+YearlyGoal → MonthlyGoal → WeeklyGoal → Task (progress bubbles up)
+```typescript
+interface YearlyGoal {
+  id: string;
+  title: string;
+  aspect: LifeAspect;
+  priority: number;                // Unique, no ties
+
+  // Vision connection (required)
+  visionId: string;
+  identityStatement: string;       // How achieving this reinforces identity
+  isHellYes: boolean;              // Constraint check: worth the sacrifice?
+  antiVisionEscape: string;        // "This moves me away from [aspect of anti-vision]"
+
+  // Progress
+  status: 'active' | 'completed' | 'abandoned';
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
+
+### Key Fields
+- **Task**: `minimumVersion`, `deferCount`, `resistanceNote`, `isHardThing`
+- **YearlyGoal**: `priority` (unique), `isHellYes`, `identityStatement`, `visionId`, `antiVisionEscape`
+- **ScheduleBlock**: `depth: 'deep' | 'shallow' | 'recovery'`
+- **JournalEntry**: `energyLevel` (1-5), `sleepQuality` (1-5), `excavationSessionId?`, `fromInterruptId?`
+
+### Date Formats
+`scheduledDate`: "2025-01-15" | `week`: "2025-W03" | `month`: "2025-01"
+
+---
+
+## Key Features
+
+### Foundation / North Star View
+
+Dedicated view showing the vision layer. Always accessible, reminds user of the "why."
+```
+┌─────────────────────────────────────────┐
+│  THE LIFE I REFUSE TO LIVE              │
+│  [antiVision sentence]                  │
+├─────────────────────────────────────────┤
+│  THE LIFE I'M BUILDING                  │
+│  [vision sentence]                      │
+├─────────────────────────────────────────┤
+│  I AM THE TYPE OF PERSON WHO...         │
+│  [identityStatement]                    │
+├─────────────────────────────────────────┤
+│  MY RULES                               │
+│  • [constraints...]                     │
+└─────────────────────────────────────────┘
+```
+
+**Location**: `components/foundation/`
+
+### Excavation Protocol
+
+Guided onboarding OR periodic reset (quarterly/yearly). Three phases:
+
+| Phase | When | Purpose |
+|-------|------|---------|
+| Morning | Start of protocol | Psychological excavation — anti-vision + vision building |
+| Day | Throughout (interrupts) | Pattern breaking — contemplation questions |
+| Evening | End of protocol | Synthesis — compress insights into actionable direction |
+
+**Prompt categories**:
+- Dissatisfaction awareness
+- Anti-vision construction ("average Tuesday in 10 years")
+- Vision construction ("ideal Tuesday in 3 years")
+- Identity statements
+- Constraint definition
+
+**Location**: `services/excavation/`
+
+### Pattern Interrupts
+
+Push notifications at random times with contemplation questions.
+```typescript
+interface InterruptSchedule {
+  enabled: boolean;
+  frequency: 'low' | 'medium' | 'high';  // 3, 5, or 8 per day
+  quietHours: { start: string; end: string };  // "22:00" - "07:00"
+  preferredWindows: string[];  // Times likely commuting/walking
+}
+```
+
+**Sample questions**:
+- "What am I avoiding right now by doing what I'm doing?"
+- "Am I moving toward the life I hate or the life I want?"
+- "What did I do today out of identity protection rather than genuine desire?"
+
+**UI**: Quick capture → optional expand to full journal entry.
+
+**Location**: `services/pattern-interrupts/`
+
+### Resistance + Vision Alignment
+
+When `deferCount >= 3` and user adds resistanceNote, prompt vision check:
+```
+"You've deferred this 3 times. Is this task actually aligned
+with the life you're building? Or something you think you 'should' do?"
+
+Options:
+- "Aligned, just resisting" → Keep, suggest breakdown
+- "Not actually aligned" → Archive with note
+- "I don't know" → Link to relevant excavation prompt
+```
+
+### Intelligent Inbox
+
+Natural language parsing: "training today 7pm bunker kd" → extracts WHAT, WHEN, WHERE with confidence scores. Malaysian context: `kd` → Kota Damansara, `bunker` → The Bunker gym.
+
+**Location**: `services/inbox-parser/`
+
+### 3D Solar System
+
+12 planets = 12 months. Planets evolve from barren to thriving based on activity (tasks, goals, habits, journal, events).
+
+**Enhancement**: Tap sun to see vision statement. Sun brightness reflects vision clarity / recent excavation.
+
+**Location**: `components/landscape/`
+
+| Fill State | Visual |
+|------------|--------|
+| 0% | Dark asteroid |
+| 1-25% | Rocky surface |
+| 26-50% | Terrain forming |
+| 51-75% | Oceans visible |
+| 76-100% | Lush planet with rings/moons |
+
 ### Ollama Integration
 
-- **Status indicator**: Shows on dashboard and inbox page
-- **Graceful fallback**: Rule-based parsing always works
-- **Hybrid mode**: LLM enhances low-confidence parses
-- **Timeout**: 10s max for LLM calls
+Optional LLM at `localhost:11434`. All features work without it (rule-based fallbacks).
 
-### UI Components (`components/inbox/`)
-
-| Component | Purpose |
-|-----------|---------|
-| `parsed-preview.tsx` | Quick confirm UI with confidence badges |
-| `ollama-status.tsx` | Connection status indicator |
+**Vision layer usage**: Can analyze excavation responses for contradictions, but never rewrites user's words.
 
 ---
 
 ## Store Pattern
-
-All Zustand stores follow:
 ```typescript
-// State
-items: Item[]
-isLoading: boolean
-error: string | null
-
-// Load once on init
-loadItems: async () => {
-  const items = await db.items.toArray()
-  set({ items })
-}
-
-// CRUD: update IndexedDB AND local state
+// Zustand: update IndexedDB AND local state together
 addItem: async (data) => {
   await db.items.add(item)
   set((state) => ({ items: [...state.items, item] }))
 }
 ```
 
-### Hydration (SSR safety)
-```typescript
-const [mounted, setMounted] = useState(false)
-useEffect(() => setMounted(true), [])
-if (!mounted) return null
-```
-
-All pages need `"use client"` directive.
-
----
-
-## Ollama Integration
-
-- Check: `GET http://localhost:11434/api/tags`
-- Generate: `POST http://localhost:11434/api/generate` with `{ model, prompt, stream: false }`
-- Status indicator on dashboard and inbox page
-
-| Feature | Ollama Required | Fallback |
-|---------|-----------------|----------|
-| Inbox parsing | No | Rule-based extraction |
-| Journal analysis | No | Rule-based sentiment |
-| AI Goal Planning | **Yes** | Manual wizard only |
-| Other analysis | No | Pattern matching |
+**SSR Safety**: All pages need `"use client"` + hydration check.
 
 ---
 
@@ -230,75 +261,25 @@ All pages need `"use client"` directive.
 
 **Aesthetic**: Warm, tactile, typography-forward. Moleskine meets minimal Japanese app.
 
-**Colors** (OKLCH, muted earthy):
-- Background: `oklch(0.986 0.003 85.87)` (#FAF9F7)
-- Foreground: `oklch(0.25 0 0)` (#2D2D2D)
-- Fitness: terracotta (#C4726C)
-- Nutrition: sage (#7D9B76)
-- Career: slate blue (#6B7B8C)
-- Financial: warm gold (#B8A068)
-- Side Projects: dusty purple (#8B7B8E)
-- Chores: warm gray (#9B9590)
-- Dark mode bg: (#1C1B1A)
+| Aspect | Color |
+|--------|-------|
+| Fitness | terracotta #C4726C |
+| Nutrition | sage #7D9B76 |
+| Career | slate blue #6B7B8C |
+| Financial | warm gold #B8A068 |
+| Side Projects | dusty purple #8B7B8E |
+| Chores | warm gray #9B9590 |
+
+**Vision Layer Colors**:
+| Element | Color |
+|---------|-------|
+| Anti-vision | muted ember #8B5A5A |
+| Vision | warm ivory #F5F0E6 |
+| Identity | soft gold #C9B896 |
 
 **Typography**: Newsreader (headers), Inter (body), JetBrains Mono (metadata)
 
-**Avoid**: Bright badge pills, harsh shadows, generic SaaS aesthetic, gradient backgrounds.
-
----
-
-## Coach Tone (`coachTone` setting)
-
-| Tone | Example |
-|------|---------|
-| gentle | "Nice work! Maybe tomorrow for this one?" |
-| balanced | "Done. Deferred - what's blocking you?" |
-| intense | "Done. Next. Deferred again - name the resistance." |
-
----
-
-## Journal Prompts
-
-Categories (internal only, never shown): `energy`, `resistance`, `consistency`, `focus`, `priority`, `progress`, `honesty`, `clarity`
-
-See `lib/prompts.ts` for full prompt list. Selection logic in `services/prompts.ts`.
-
-Goal-based prompts: 50% chance to generate prompt from active goals.
-
----
-
-## Gotchas
-
-### Dexie Boolean Indexing
-```typescript
-.where("isActive").equals(1)  // correct
-.where("isActive").equals(true)  // won't work
-```
-
-### TypeScript Build Errors
-```javascript
-// next.config.mjs ignores TS errors
-typescript: { ignoreBuildErrors: true }
-```
-**Always run `npx tsc --noEmit` before committing.**
-
-### Path Aliases
-```typescript
-import { db } from "@/db"
-import { Task } from "@/lib/types"
-import { Button } from "@/components/ui/button"
-```
-
----
-
-## Commands
-
-```bash
-npm run dev          # Dev server
-npm run build        # Production build
-npm run lint         # ESLint
-npx tsc --noEmit     # TypeScript check (required before commits)
-```
+**Avoid**: Bright badge pills, harsh shadows, gradient backgrounds, guilt-tripping copy.
 
 ---
 
@@ -306,52 +287,47 @@ npx tsc --noEmit     # TypeScript check (required before commits)
 
 | Path | Purpose |
 |------|---------|
-| `lib/types.ts` | All TypeScript interfaces |
-| `db/index.ts` | Dexie schema (v4: parsing + breakdown fields) |
-| `stores/*.ts` | Zustand stores (one per entity) |
-| `services/*.ts` | Business logic (analysis, progress, resistance, streaks) |
-| `services/inbox-parser/` | Natural language parsing services |
-| `services/ollama.ts` | Ollama LLM integration |
-| `lib/prompts.ts` | Journal prompt definitions |
-| `components/providers.tsx` | DataProvider for IndexedDB init |
-| `components/inbox/` | Parsing UI components |
+| `lib/types.ts` | TypeScript interfaces |
+| `db/index.ts` | Dexie schema |
+| `stores/*.ts` | Zustand stores |
+| `stores/vision-store.ts` | LifeVision + ExcavationSession state |
+| `stores/interrupt-store.ts` | PatternInterrupt state + scheduling |
+| `services/inbox-parser/` | NL parsing |
+| `services/excavation/` | Protocol prompts + flow logic |
+| `services/excavation/prompts.ts` | All excavation questions by phase |
+| `services/pattern-interrupts/` | Interrupt scheduling + notification |
+| `components/landscape/` | 3D visualization |
+| `components/foundation/` | Vision/anti-vision display |
+| `components/excavation/` | Protocol flow UI |
 
 ---
 
-## Adding New Features
-
-### New page
-1. Create `app/[route]/page.tsx` with `"use client"`
-2. Wrap in `<AppLayout>`
-3. Add nav link in `components/app-layout.tsx`
-
-### New data entity
-1. Interface in `lib/types.ts`
-2. Table in `db/index.ts` (increment version)
-3. Store in `stores/`
-4. Add `loadX()` to `hooks/use-data.ts`
-
-### New behavioral principle
-- Update types/db/stores if new fields needed
-- **Never expose book/author names in UI**
+## Commands
+```bash
+npm run dev          # Dev server
+npm run build        # Production build
+npx tsc --noEmit     # TypeScript check (required)
+```
 
 ---
 
-## Important Notes
+## Gotchas
 
-1. **Offline-first**: Never assume network
-2. **No backend**: Client-only, IndexedDB storage
-3. **Mobile-first**: Design for mobile, enhance for desktop
-4. **Coach not tracker**: App guides behavior, doesn't just record
-5. **Plain language**: No jargon, no book titles, explain concepts simply
-6. **Run `npx tsc --noEmit` before committing**
+- **Dexie booleans**: `.where("isActive").equals(1)` not `.equals(true)`
+- **Path aliases**: `@/db`, `@/lib/types`, `@/components/ui/button`
+- **Excavation responses**: Store raw user input, never AI-rewrite
+- **Pattern interrupts**: Always skippable, never guilt-trip on skip
 
 ---
 
-## When In Doubt
+## Guiding Principles
 
-- Simpler is better
-- Make it work offline first
-- Typography and whitespace over decoration
-- Principles baked in invisibly
-- User starts immediately without setup
+1. Offline-first (never assume network)
+2. Coach not tracker (guides behavior)
+3. Mobile-first design
+4. Simpler is better
+5. Typography over decoration
+6. Principles invisible to user
+7. Vision layer present but not preachy — shows up when relevant
+8. User's words are sacred — never rewrite their excavation responses
+9. Identity > actions — change who you are, behavior follows

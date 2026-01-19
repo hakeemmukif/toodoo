@@ -39,6 +39,18 @@ interface TrainingState {
   getSuggestedGoalsForSession: (type: TrainingType) => Promise<YearlyGoal[]>
   linkSessionToGoal: (sessionId: string, goalId: string) => Promise<void>
   unlinkSessionFromGoal: (sessionId: string) => Promise<void>
+
+  // Quick logging (minimal friction, no goal link)
+  quickLogSession: (type: TrainingType, duration: number, intensity?: number, date?: string) => Promise<string>
+
+  // Distinction helpers
+  getGoalLinkedSessions: () => TrainingSession[]
+  getUnlinkedSessions: () => TrainingSession[]
+  getStatsWithDistinction: () => {
+    all: { totalSessions: number; totalMinutes: number; thisWeekSessions: number }
+    goalLinked: { totalSessions: number; totalMinutes: number; thisWeekSessions: number }
+    unlinked: { totalSessions: number; totalMinutes: number; thisWeekSessions: number }
+  }
 }
 
 export const useTrainingStore = create<TrainingState>((set, get) => ({
@@ -228,5 +240,62 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
         s.id === sessionId ? { ...s, linkedGoalId: undefined, updatedAt: new Date() } : s
       ),
     }))
+  },
+
+  // Quick logging - minimal friction, no goal link required
+  quickLogSession: async (type, duration, intensity = 5, date) => {
+    const id = generateId()
+    const session: TrainingSession = {
+      id,
+      type,
+      duration,
+      intensity,
+      date: date || formatDate(new Date()),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+    await db.trainingSessions.add(session)
+    set((state) => ({ sessions: [session, ...state.sessions] }))
+    return id
+  },
+
+  // Distinction helpers
+  getGoalLinkedSessions: () => {
+    return get().sessions.filter((s) => !!s.linkedGoalId)
+  },
+
+  getUnlinkedSessions: () => {
+    return get().sessions.filter((s) => !s.linkedGoalId)
+  },
+
+  getStatsWithDistinction: () => {
+    const all = get().sessions
+    const linked = get().getGoalLinkedSessions()
+    const unlinked = get().getUnlinkedSessions()
+
+    const today = new Date()
+    const weekStart = new Date(today)
+    weekStart.setDate(today.getDate() - today.getDay())
+    const weekStartStr = formatDate(weekStart)
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekStart.getDate() + 6)
+    const weekEndStr = formatDate(weekEnd)
+
+    const calculateStats = (sessions: TrainingSession[]) => {
+      const weekSessions = sessions.filter(
+        (s) => s.date >= weekStartStr && s.date <= weekEndStr
+      )
+      return {
+        totalSessions: sessions.length,
+        totalMinutes: sessions.reduce((sum, s) => sum + s.duration, 0),
+        thisWeekSessions: weekSessions.length,
+      }
+    }
+
+    return {
+      all: calculateStats(all),
+      goalLinked: calculateStats(linked),
+      unlinked: calculateStats(unlinked),
+    }
   },
 }))

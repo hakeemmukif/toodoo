@@ -23,6 +23,10 @@ import type {
   InventoryItem,
   AirFryerRecipe,
   AirFryerDevice,
+  CookingSession,
+  DailyExcavation,
+  EmergentVision,
+  PatternInterrupt,
 } from "@/lib/types"
 
 class LifeTrackerDB extends Dexie {
@@ -51,6 +55,13 @@ class LifeTrackerDB extends Dexie {
   airFryerRecipes!: Table<AirFryerRecipe>
   // Version 10: Air fryer device settings
   airFryerDevices!: Table<AirFryerDevice>
+  // Version 11: Cooking session sequencer
+  cookingSessions!: Table<CookingSession>
+  // Version 12: Daily excavation system
+  dailyExcavations!: Table<DailyExcavation>
+  emergentVision!: Table<EmergentVision>
+  // Version 13: Pattern interrupts for contemplation
+  patternInterrupts!: Table<PatternInterrupt>
 
   constructor() {
     super("LifeTrackerDB")
@@ -321,6 +332,98 @@ class LifeTrackerDB extends Dexie {
       airFryerRecipes: "id, difficulty, *tags",
       // New: User's air fryer device configuration
       airFryerDevices: "id",
+    })
+
+    // Version 11: Cooking session sequencer for multi-item batch optimization
+    this.version(11).stores({
+      yearlyGoals: "id, aspect, year, status, priority, goalType",
+      monthlyGoals: "id, yearlyGoalId, aspect, month, status, priority",
+      weeklyGoals: "id, monthlyGoalId, aspect, week, status",
+      tasks: "id, weeklyGoalId, aspect, scheduledDate, status, recurrenceTemplateId, deferCount, parentTaskId, isSubtask, hardScheduledTime",
+      recurrenceTemplates: "id, aspect, isActive",
+      journalEntries: "id, timestamp, *detectedAspects, goalAlignment, promptCategory, energyLevel, *linkedGoalIds, goalContext",
+      trainingSessions: "id, date, type, isHardThing, linkedGoalId",
+      meals: "id, date, type, recipeId, cooked, linkedGoalId",
+      recipes: "id, *tags, rating",
+      shoppingLists: "id, store",
+      shoppingItems: "id, listId, category, status, priority",
+      scheduleBlocks: "id, date, type, depth, linkedTaskId, linkedGoalId",
+      appSettings: "id",
+      inboxItems: "id, capturedAt, processedAt, parseVersion",
+      weeklyReviews: "id, weekOf, completedAt",
+      financialSnapshots: "id, date, linkedGoalId, onTrack",
+      streakData: "type",
+      planningDrafts: "id, aspect, createdAt, lastModifiedAt",
+      syncIssues: "id, type, severity, entityType, entityId, layer, detectedAt, resolvedAt",
+      syncRuns: "id, runType, startedAt",
+      inventoryItems: "id, normalizedName, category, expiresAt",
+      airFryerRecipes: "id, difficulty, *tags",
+      airFryerDevices: "id",
+      // New: Cooking session for batch optimization
+      cookingSessions: "id, status, createdAt",
+    })
+
+    // Version 12: Daily excavation system for psychological foundation building
+    this.version(12).stores({
+      yearlyGoals: "id, aspect, year, status, priority, goalType",
+      monthlyGoals: "id, yearlyGoalId, aspect, month, status, priority",
+      weeklyGoals: "id, monthlyGoalId, aspect, week, status",
+      tasks: "id, weeklyGoalId, aspect, scheduledDate, status, recurrenceTemplateId, deferCount, parentTaskId, isSubtask, hardScheduledTime",
+      recurrenceTemplates: "id, aspect, isActive",
+      journalEntries: "id, timestamp, *detectedAspects, goalAlignment, promptCategory, energyLevel, *linkedGoalIds, goalContext",
+      trainingSessions: "id, date, type, isHardThing, linkedGoalId",
+      meals: "id, date, type, recipeId, cooked, linkedGoalId",
+      recipes: "id, *tags, rating",
+      shoppingLists: "id, store",
+      shoppingItems: "id, listId, category, status, priority",
+      scheduleBlocks: "id, date, type, depth, linkedTaskId, linkedGoalId",
+      appSettings: "id",
+      inboxItems: "id, capturedAt, processedAt, parseVersion",
+      weeklyReviews: "id, weekOf, completedAt",
+      financialSnapshots: "id, date, linkedGoalId, onTrack",
+      streakData: "type",
+      planningDrafts: "id, aspect, createdAt, lastModifiedAt",
+      syncIssues: "id, type, severity, entityType, entityId, layer, detectedAt, resolvedAt",
+      syncRuns: "id, runType, startedAt",
+      inventoryItems: "id, normalizedName, category, expiresAt",
+      airFryerRecipes: "id, difficulty, *tags",
+      airFryerDevices: "id",
+      cookingSessions: "id, status, createdAt",
+      // New: Daily excavation for building psychological foundation over time
+      dailyExcavations: "id, date, theme, isComplete, startedAt",
+      emergentVision: "id",
+    })
+
+    // Version 13: Pattern interrupts for contemplation questions
+    this.version(13).stores({
+      yearlyGoals: "id, aspect, year, status, priority, goalType",
+      monthlyGoals: "id, yearlyGoalId, aspect, month, status, priority",
+      weeklyGoals: "id, monthlyGoalId, aspect, week, status",
+      tasks: "id, weeklyGoalId, aspect, scheduledDate, status, recurrenceTemplateId, deferCount, parentTaskId, isSubtask, hardScheduledTime",
+      recurrenceTemplates: "id, aspect, isActive",
+      journalEntries: "id, timestamp, *detectedAspects, goalAlignment, promptCategory, energyLevel, *linkedGoalIds, goalContext",
+      trainingSessions: "id, date, type, isHardThing, linkedGoalId",
+      meals: "id, date, type, recipeId, cooked, linkedGoalId",
+      recipes: "id, *tags, rating",
+      shoppingLists: "id, store",
+      shoppingItems: "id, listId, category, status, priority",
+      scheduleBlocks: "id, date, type, depth, linkedTaskId, linkedGoalId",
+      appSettings: "id",
+      inboxItems: "id, capturedAt, processedAt, parseVersion",
+      weeklyReviews: "id, weekOf, completedAt",
+      financialSnapshots: "id, date, linkedGoalId, onTrack",
+      streakData: "type",
+      planningDrafts: "id, aspect, createdAt, lastModifiedAt",
+      syncIssues: "id, type, severity, entityType, entityId, layer, detectedAt, resolvedAt",
+      syncRuns: "id, runType, startedAt",
+      inventoryItems: "id, normalizedName, category, expiresAt",
+      airFryerRecipes: "id, difficulty, *tags",
+      airFryerDevices: "id",
+      cookingSessions: "id, status, createdAt",
+      dailyExcavations: "id, date, theme, isComplete, startedAt",
+      emergentVision: "id",
+      // New: Pattern interrupts for random contemplation questions
+      patternInterrupts: "id, scheduledFor, skipped, respondedAt",
     })
   }
 }

@@ -22,6 +22,7 @@ import {
   Target,
   Plus,
   Loader2,
+  type LucideIcon,
 } from "lucide-react"
 import { GoalSelector } from "./goal-selector"
 import { ConflictWarning } from "./conflict-warning"
@@ -89,7 +90,7 @@ function SlotDisplay({
   confidence,
   source,
 }: {
-  icon: React.ElementType
+  icon: LucideIcon
   label: string
   value: string
   confidence?: number
@@ -105,9 +106,7 @@ function SlotDisplay({
           </span>
           {confidence !== undefined && <ConfidenceBadge confidence={confidence} />}
           {source === "llm" && (
-            <span title="AI enhanced">
-              <Sparkles className="h-3 w-3 text-purple-500" />
-            </span>
+            <Sparkles className="h-3 w-3 text-purple-500" />
           )}
         </div>
         <p className="truncate text-sm font-medium">{value}</p>
@@ -233,10 +232,7 @@ export function ParsedPreview({
                 </span>
               )}
               {!isEnhancing && parsingMethod === "hybrid" && (
-                <span className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400">
-                  <Sparkles className="h-3 w-3" />
-                  AI Enhanced
-                </span>
+                <Sparkles className="h-3 w-3 text-purple-500" />
               )}
             </div>
             <p className="text-sm italic text-muted-foreground">"{originalText}"</p>

@@ -38,6 +38,18 @@ interface MealsState {
   getSuggestedGoalsForMeal: () => Promise<YearlyGoal[]>
   linkMealToGoal: (mealId: string, goalId: string) => Promise<void>
   unlinkMealFromGoal: (mealId: string) => Promise<void>
+
+  // Quick logging (minimal friction, no goal link)
+  quickLogMeal: (name: string, cooked: boolean, type?: MealType, date?: string) => Promise<string>
+
+  // Distinction helpers
+  getGoalLinkedMeals: () => Meal[]
+  getUnlinkedMeals: () => Meal[]
+  getCookingRatioStats: () => {
+    allTime: { cooked: number; ordered: number; total: number; ratio: number }
+    thisWeek: { cooked: number; ordered: number; total: number; ratio: number }
+    thisMonth: { cooked: number; ordered: number; total: number; ratio: number }
+  }
 }
 
 export const useMealsStore = create<MealsState>((set, get) => ({
@@ -181,5 +193,68 @@ export const useMealsStore = create<MealsState>((set, get) => ({
         m.id === mealId ? { ...m, linkedGoalId: undefined, updatedAt: new Date() } : m
       ),
     }))
+  },
+
+  // Quick logging - minimal friction, no goal link required
+  quickLogMeal: async (name, cooked, type = "dinner", date) => {
+    const id = generateId()
+    const meal: Meal = {
+      id,
+      type,
+      date: date || formatDate(new Date()),
+      description: name,
+      cooked,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+    await db.meals.add(meal)
+    set((state) => ({ meals: [meal, ...state.meals] }))
+    return id
+  },
+
+  // Distinction helpers
+  getGoalLinkedMeals: () => {
+    return get().meals.filter((m) => !!m.linkedGoalId)
+  },
+
+  getUnlinkedMeals: () => {
+    return get().meals.filter((m) => !m.linkedGoalId)
+  },
+
+  getCookingRatioStats: () => {
+    const meals = get().meals
+    const today = new Date()
+
+    // Week boundaries
+    const weekStart = new Date(today)
+    weekStart.setDate(today.getDate() - today.getDay())
+    const weekStartStr = formatDate(weekStart)
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekStart.getDate() + 6)
+    const weekEndStr = formatDate(weekEnd)
+
+    // Month boundaries
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+    const monthStartStr = formatDate(monthStart)
+    const monthEndStr = formatDate(monthEnd)
+
+    const calculateRatio = (mealList: Meal[]) => {
+      const cooked = mealList.filter((m) => m.cooked).length
+      const ordered = mealList.filter((m) => !m.cooked).length
+      const total = mealList.length
+      const ratio = total > 0 ? Math.round((cooked / total) * 100) : 0
+      return { cooked, ordered, total, ratio }
+    }
+
+    return {
+      allTime: calculateRatio(meals),
+      thisWeek: calculateRatio(
+        meals.filter((m) => m.date >= weekStartStr && m.date <= weekEndStr)
+      ),
+      thisMonth: calculateRatio(
+        meals.filter((m) => m.date >= monthStartStr && m.date <= monthEndStr)
+      ),
+    }
   },
 }))

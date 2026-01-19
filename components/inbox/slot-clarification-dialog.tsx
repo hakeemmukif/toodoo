@@ -184,10 +184,7 @@ export function SlotClarificationDialog({
           <DialogTitle className="flex items-center gap-2">
             Quick clarification
             {generationMethod === "ai" && (
-              <span className="flex items-center gap-1 text-xs font-normal text-purple-600 dark:text-purple-400">
-                <Sparkles className="h-3 w-3" />
-                AI Enhanced
-              </span>
+              <Sparkles className="h-3 w-3 text-purple-500" />
             )}
           </DialogTitle>
           <DialogDescription asChild>

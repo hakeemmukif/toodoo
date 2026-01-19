@@ -12,13 +12,14 @@ import { Switch } from "@/components/ui/switch"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useMealsStore } from "@/stores/meals"
-import { useRecipesStore } from "@/stores/recipes"
 import { formatDate } from "@/db"
 import type { MealType, YearlyGoal } from "@/lib/types"
-import { Utensils, ChefHat, ShoppingBag, Check, Plus, CalendarIcon, Trash2, Target } from "lucide-react"
+import { Utensils, ChefHat, ShoppingBag, Check, Plus, CalendarIcon, Trash2, Target, Zap } from "lucide-react"
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
+import { ActivityBadge } from "@/components/activity-badge"
+import type { LoggingMode } from "@/lib/types"
 
 const mealTypes: { value: MealType; label: string }[] = [
   { value: "breakfast", label: "Breakfast" },
@@ -33,9 +34,9 @@ export default function MealsPage() {
   const [cooked, setCooked] = useState(true)
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [datePickerOpen, setDatePickerOpen] = useState(false)
-  const [selectedRecipeId, setSelectedRecipeId] = useState<string>("")
-  const [selectedGoalId, setSelectedGoalId] = useState<string>("")
+    const [selectedGoalId, setSelectedGoalId] = useState<string>("")
   const [suggestedGoals, setSuggestedGoals] = useState<YearlyGoal[]>([])
+  const [loggingMode, setLoggingMode] = useState<LoggingMode>("quick")
 
   const meals = useMealsStore((state) => state.meals)
   const addMeal = useMealsStore((state) => state.addMeal)
@@ -43,9 +44,10 @@ export default function MealsPage() {
   const getMealsForDate = useMealsStore((state) => state.getMealsForDate)
   const getCookingStats = useMealsStore((state) => state.getCookingStats)
   const getSuggestedGoalsForMeal = useMealsStore((state) => state.getSuggestedGoalsForMeal)
+  const quickLogMeal = useMealsStore((state) => state.quickLogMeal)
+  const getCookingRatioStats = useMealsStore((state) => state.getCookingRatioStats)
 
-  const recipes = useRecipesStore((state) => state.recipes)
-
+  
   // Load suggested nutrition goals
   useEffect(() => {
     getSuggestedGoalsForMeal().then(setSuggestedGoals)
@@ -71,29 +73,37 @@ export default function MealsPage() {
   const handleLogMeal = async () => {
     if (!description.trim()) return
 
-    await addMeal({
-      type: selectedType,
-      date: formatDate(selectedDate),
-      description: description.trim(),
-      cooked,
-      recipeId: selectedRecipeId || undefined,
-      linkedGoalId: selectedGoalId || undefined,
-    })
+    if (loggingMode === "quick") {
+      // Quick log - minimal friction, just name and cooked status
+      await quickLogMeal(description.trim(), cooked, selectedType, formatDate(selectedDate))
+      toast({
+        title: "Meal logged",
+        description: cooked ? "Cooked meal recorded" : "Meal recorded",
+      })
+    } else {
+      // Full log with goal linking
+      await addMeal({
+        type: selectedType,
+        date: formatDate(selectedDate),
+        description: description.trim(),
+        cooked,
+                linkedGoalId: selectedGoalId || undefined,
+      })
+
+      const goalName = suggestedGoals.find((g) => g.id === selectedGoalId)?.title
+      toast({
+        title: "Meal logged",
+        description: goalName
+          ? `Linked to goal: ${goalName}`
+          : "Your meal has been recorded.",
+      })
+    }
 
     // Reset form
     setDescription("")
     setCooked(true)
     setSelectedDate(new Date())
-    setSelectedRecipeId("")
     setSelectedGoalId("")
-
-    const goalName = suggestedGoals.find((g) => g.id === selectedGoalId)?.title
-    toast({
-      title: "Meal logged",
-      description: goalName
-        ? `Linked to goal: ${goalName}`
-        : "Your meal has been recorded.",
-    })
   }
 
   const handleDeleteMeal = async (id: string) => {
@@ -104,17 +114,7 @@ export default function MealsPage() {
     })
   }
 
-  const handleRecipeSelect = (recipeId: string) => {
-    setSelectedRecipeId(recipeId)
-    if (recipeId) {
-      const recipe = recipes.find((r) => r.id === recipeId)
-      if (recipe) {
-        setDescription(recipe.title)
-        setCooked(true)
-      }
-    }
-  }
-
+  
   return (
     <AppLayout>
       <div className="container max-w-4xl space-y-6 p-4 md:p-6 lg:p-8">
@@ -163,7 +163,29 @@ export default function MealsPage() {
         {/* Log Meal Card */}
         <Card>
           <CardHeader>
-            <CardTitle>Log Meal</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Log Meal</CardTitle>
+              <div className="flex gap-1 rounded-lg bg-muted p-1">
+                <Button
+                  variant={loggingMode === "quick" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setLoggingMode("quick")}
+                >
+                  <Zap className="h-3.5 w-3.5" />
+                  Quick
+                </Button>
+                <Button
+                  variant={loggingMode === "goal-linked" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setLoggingMode("goal-linked")}
+                >
+                  <Target className="h-3.5 w-3.5" />
+                  Goal
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -207,25 +229,7 @@ export default function MealsPage() {
                 </Popover>
               </div>
             </div>
-            {recipes.length > 0 && (
-              <div className="space-y-2">
-                <Label>From Recipe (optional)</Label>
-                <Select value={selectedRecipeId || "none"} onValueChange={(v) => handleRecipeSelect(v === "none" ? "" : v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a recipe..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No recipe</SelectItem>
-                    {recipes.map((recipe) => (
-                      <SelectItem key={recipe.id} value={recipe.id}>
-                        {recipe.title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div className="space-y-2">
+                        <div className="space-y-2">
               <Label htmlFor="description">What did you eat?</Label>
               <Textarea
                 id="description"
@@ -241,7 +245,7 @@ export default function MealsPage() {
               </Label>
               <Switch id="cooked" checked={cooked} onCheckedChange={setCooked} />
             </div>
-            {suggestedGoals.length > 0 && (
+            {loggingMode === "goal-linked" && suggestedGoals.length > 0 && (
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   <Target className="h-4 w-4" />
@@ -261,6 +265,11 @@ export default function MealsPage() {
                   </SelectContent>
                 </Select>
               </div>
+            )}
+            {loggingMode === "quick" && (
+              <p className="text-sm text-muted-foreground">
+                All meals count toward your cooking ratio stats.
+              </p>
             )}
             <Button className="w-full" onClick={handleLogMeal} disabled={!description.trim()}>
               <Plus className="mr-2 h-4 w-4" />
@@ -376,7 +385,10 @@ export default function MealsPage() {
                         )}
                       </div>
                       <div className="flex-1">
-                        <div className="font-medium">{meal.description}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{meal.description}</span>
+                          <ActivityBadge countsTowardGoal={!!meal.linkedGoalId} size="sm" />
+                        </div>
                         <div className="text-sm text-muted-foreground">
                           {typeLabel} - {dateStr}
                         </div>

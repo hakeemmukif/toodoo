@@ -1406,6 +1406,47 @@ export interface EmergentVision {
   updatedAt: Date
 }
 
+// ========== PATTERN INTERRUPT TYPES ==========
+
+// Pattern interrupt - random contemplation questions to break autopilot behavior
+export interface PatternInterrupt {
+  id: string
+  question: string                           // The contemplation question
+  scheduledFor: Date                         // When to show this interrupt
+  isRandom: boolean                          // Random time vs fixed schedule
+
+  // Response
+  response?: string                          // User's reflection
+  respondedAt?: Date
+  skipped: boolean                           // User chose to skip
+
+  // Vision alignment check
+  alignmentCheck?: 'toward-vision' | 'toward-anti-vision' | 'neutral'
+
+  // Optional link to journal for expanded reflection
+  journalEntryId?: string
+
+  createdAt: Date
+  updatedAt: Date
+}
+
+// User's interrupt schedule preferences
+export interface InterruptSchedule {
+  enabled: boolean
+  frequency: 'low' | 'medium' | 'high'       // 3, 5, 8 per day
+  quietHours: { start: string; end: string } // e.g., "22:00" - "07:00"
+  preferredWindows: string[]                 // Times user is likely available
+  lastScheduledDate?: string                 // Last date we generated interrupts for
+}
+
+// Default interrupt schedule
+export const DEFAULT_INTERRUPT_SCHEDULE: InterruptSchedule = {
+  enabled: false,
+  frequency: 'low',
+  quietHours: { start: '22:00', end: '07:00' },
+  preferredWindows: [],
+}
+
 // ========== INGREDIENT RECOGNITION TYPES ==========
 
 // Category of ingredient for air fryer cooking (different from pantry categories)

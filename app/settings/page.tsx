@@ -23,8 +23,9 @@ import {
 } from "@/components/ui/alert-dialog"
 import { ASPECT_CONFIG } from "@/lib/constants"
 import { useAppStore } from "@/stores/app"
+import { useInterruptsStore } from "@/stores/interrupts"
 import { checkOllamaConnection, getAvailableModels } from "@/services/ollama"
-import { Moon, Sun, Download, Upload, Trash2, CheckCircle2, XCircle, Info, Loader2 } from "lucide-react"
+import { Moon, Sun, Download, Upload, Trash2, CheckCircle2, XCircle, Info, Loader2, Bell } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 export default function SettingsPage() {
@@ -44,6 +45,17 @@ export default function SettingsPage() {
   const [connectionStatus, setConnectionStatus] = useState<"idle" | "testing" | "success" | "error">("idle")
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
+
+  // Pattern interrupt settings
+  const interruptSchedule = useInterruptsStore((state) => state.schedule)
+  const updateInterruptSchedule = useInterruptsStore((state) => state.updateSchedule)
+  const toggleInterruptsEnabled = useInterruptsStore((state) => state.toggleEnabled)
+  const loadSchedule = useInterruptsStore((state) => state.loadSchedule)
+
+  // Load interrupt schedule on mount
+  useEffect(() => {
+    loadSchedule()
+  }, [loadSchedule])
 
   // Initialize from settings
   useEffect(() => {
@@ -225,6 +237,95 @@ export default function SettingsPage() {
                 )
               })}
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Pattern Interrupts */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Pattern Interrupts</CardTitle>
+            <CardDescription>Random contemplation questions to break autopilot behavior</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Bell className="h-5 w-5" />
+                <div>
+                  <Label>Enable Interrupts</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Receive periodic prompts for reflection
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={interruptSchedule.enabled}
+                onCheckedChange={toggleInterruptsEnabled}
+              />
+            </div>
+
+            {interruptSchedule.enabled && (
+              <>
+                <div className="space-y-2">
+                  <Label>Frequency</Label>
+                  <Select
+                    value={interruptSchedule.frequency}
+                    onValueChange={(value) =>
+                      updateInterruptSchedule({
+                        frequency: value as "low" | "medium" | "high",
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low (3 per day)</SelectItem>
+                      <SelectItem value="medium">Medium (5 per day)</SelectItem>
+                      <SelectItem value="high">High (8 per day)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Questions will be distributed randomly throughout the day
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Quiet Hours</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="time"
+                      value={interruptSchedule.quietHours.start}
+                      onChange={(e) =>
+                        updateInterruptSchedule({
+                          quietHours: {
+                            ...interruptSchedule.quietHours,
+                            start: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-32"
+                    />
+                    <span className="text-muted-foreground">to</span>
+                    <Input
+                      type="time"
+                      value={interruptSchedule.quietHours.end}
+                      onChange={(e) =>
+                        updateInterruptSchedule({
+                          quietHours: {
+                            ...interruptSchedule.quietHours,
+                            end: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-32"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    No interrupts during quiet hours
+                  </p>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 

@@ -83,7 +83,7 @@ export function OllamaStatusIndicator({
               {status === "connected" && (
                 <>
                   <Sparkles className="h-3 w-3" />
-                  <span>AI Enhanced</span>
+                  <span>Smart</span>
                 </>
               )}
               {status === "disconnected" && (
@@ -170,9 +170,9 @@ export function OllamaStatusIndicator({
           <>
             <Wifi className="h-4 w-4 text-green-600 dark:text-green-400" />
             <div>
-              <p className="text-sm font-medium">AI Parsing Active</p>
+              <p className="text-sm font-medium">Smart Parsing</p>
               <p className="text-xs text-muted-foreground">
-                Ollama enhances parsing accuracy
+                Enhanced parsing active
               </p>
             </div>
           </>
