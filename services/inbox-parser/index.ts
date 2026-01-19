@@ -16,10 +16,12 @@ import type {
   LifeAspect,
   TimePreference,
   Task,
+  TaskPriority,
 } from "@/lib/types"
 import { extractDate } from "./entity-extractors/date-extractor"
 import { extractTime, extractDuration, inferTimePreferenceFromText } from "./entity-extractors/time-extractor"
 import { extractWho } from "./entity-extractors/who-extractor"
+import { extractPriority, removePriorityFromText } from "./entity-extractors/priority-extractor"
 import { extractLocation, expandMalaysianAbbreviations, formatMalaysianDate, getMalaysianDate } from "./malaysian-context"
 import { classifyIntent, inferActivityDescription } from "./intent-classifier"
 import {
@@ -70,22 +72,24 @@ export async function parseInboxItem(
   const tokens = tokenize(normalizedContent)
 
   // 2. Run all extractors in parallel
-  const [dateResult, timeResult, locationResult, intentResult, durationResult, whoResult] = await Promise.all([
+  const [dateResult, timeResult, locationResult, intentResult, durationResult, whoResult, priorityResult] = await Promise.all([
     Promise.resolve(extractDate(normalizedContent)),
     Promise.resolve(extractTime(normalizedContent)),
     Promise.resolve(extractLocation(normalizedContent)),
     Promise.resolve(classifyIntent(normalizedContent)),
     Promise.resolve(extractDuration(normalizedContent)),
     Promise.resolve(extractWho(normalizedContent)),
+    Promise.resolve(extractPriority(normalizedContent)),
   ])
 
   // 3. Build parsed slots
-  const what = buildWhatSlot(content, intentResult)
+  const what = buildWhatSlot(content, intentResult, priorityResult)
   const when = buildWhenSlot(dateResult, timeResult, normalizedContent)
   const where = buildWhereSlot(locationResult)
   const duration = buildDurationSlot(durationResult, intentResult?.aspect)
   const intent = buildIntentSlot(intentResult)
   const who = buildWhoSlot(whoResult)
+  const priority = buildPrioritySlot(priorityResult)
 
   // 4. Build initial result
   const result: ParsedResult = {
@@ -94,6 +98,7 @@ export async function parseInboxItem(
     where,
     who, // Extracted WHO or default "solo"
     duration,
+    priority, // Todoist-style priority (p1-p4)
     intent,
     goalMatch: null,
     alternativeGoals: [],
@@ -104,7 +109,7 @@ export async function parseInboxItem(
     suggestedTask: {},
     rawExtractions: {
       tokens,
-      matchedPatterns: collectMatchedPatterns(dateResult, timeResult, locationResult, intentResult),
+      matchedPatterns: collectMatchedPatterns(dateResult, timeResult, locationResult, intentResult, priorityResult),
     },
   }
 
@@ -227,18 +232,22 @@ function tokenize(text: string): string[] {
 
 /**
  * Build the "what" (activity) slot
+ * Cleans priority markers (p1-p4) from the title
  */
 function buildWhatSlot(
   originalText: string,
-  intentResult: ReturnType<typeof classifyIntent>
+  intentResult: ReturnType<typeof classifyIntent>,
+  priorityResult: ReturnType<typeof extractPriority>
 ): ParsedSlot | null {
-  const activity = inferActivityDescription(originalText, intentResult)
+  // Clean priority markers from the activity description
+  const cleanedText = priorityResult ? removePriorityFromText(originalText) : originalText
+  const activity = inferActivityDescription(cleanedText, intentResult)
 
   if (activity.length < 2) return null
 
   return {
     value: activity,
-    rawMatch: originalText,
+    rawMatch: cleanedText,
     confidence: intentResult ? Math.min(intentResult.confidence + 0.1, 0.95) : 0.60,
     source: "rule",
   }
@@ -381,13 +390,30 @@ function buildWhoSlot(
 }
 
 /**
+ * Build the priority slot
+ */
+function buildPrioritySlot(
+  priorityResult: ReturnType<typeof extractPriority>
+): ParsedSlot<TaskPriority> | null {
+  if (!priorityResult) return null
+
+  return {
+    value: priorityResult.priority,
+    rawMatch: priorityResult.matchedText,
+    confidence: priorityResult.confidence,
+    source: "rule",
+  }
+}
+
+/**
  * Collect all matched patterns for debugging
  */
 function collectMatchedPatterns(
   dateResult: ReturnType<typeof extractDate>,
   timeResult: ReturnType<typeof extractTime>,
   locationResult: ReturnType<typeof extractLocation>,
-  intentResult: ReturnType<typeof classifyIntent>
+  intentResult: ReturnType<typeof classifyIntent>,
+  priorityResult: ReturnType<typeof extractPriority>
 ): string[] {
   const patterns: string[] = []
 
@@ -395,6 +421,7 @@ function collectMatchedPatterns(
   if (timeResult) patterns.push(`time:${timeResult.matchedText}`)
   if (locationResult) patterns.push(`location:${locationResult.rawMatch}`)
   if (intentResult) patterns.push(`intent:${intentResult.matchedKeywords.join(",")}`)
+  if (priorityResult) patterns.push(`priority:${priorityResult.matchedText}`)
 
   return patterns
 }
@@ -417,6 +444,7 @@ export {
 
 export { extractDate } from "./entity-extractors/date-extractor"
 export { extractTime, extractDuration } from "./entity-extractors/time-extractor"
+export { extractPriority, removePriorityFromText } from "./entity-extractors/priority-extractor"
 export { classifyIntent, getAllIntentScores } from "./intent-classifier"
 export { matchToGoals, findGoalForAspect } from "./goal-matcher"
 export { parseFrequencyFromTitle, matchesAction } from "./frequency-parser"

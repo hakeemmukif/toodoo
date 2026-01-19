@@ -27,6 +27,7 @@ import type { LifeAspect, TaskStatus, TimePreference } from "@/lib/types"
 import { ListTodo, Plus, Filter, CalendarIcon } from "lucide-react"
 import { formatDate } from "@/db"
 import { format } from "date-fns"
+import { QuickAddInput } from "@/components/tasks/quick-add-input"
 
 export default function TasksPage() {
   const [selectedAspect, setSelectedAspect] = useState<LifeAspect | "all">("all")
@@ -214,6 +215,9 @@ export default function TasksPage() {
             </DialogContent>
           </Dialog>
         </div>
+
+        {/* Quick Add */}
+        <QuickAddInput />
 
         {/* Filters */}
         <Card>

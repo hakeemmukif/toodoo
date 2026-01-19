@@ -15,9 +15,10 @@ const SLOT_WEIGHTS = {
   intent: 0.20,      // Classification
   date: 0.20,        // When
   time: 0.10,        // Specific time (often optional)
-  where: 0.10,       // Location (often optional)
-  duration: 0.10,    // Duration estimate
-  who: 0.05,         // People (rarely extracted)
+  where: 0.08,       // Location (often optional)
+  duration: 0.08,    // Duration estimate
+  priority: 0.05,    // Priority (p1-p4)
+  who: 0.04,         // People (rarely extracted)
 }
 
 // Thresholds for confidence levels
@@ -73,6 +74,12 @@ export function calculateOverallConfidence(parsed: ParsedResult): number {
   if (parsed.duration) {
     weightedSum += parsed.duration.confidence * SLOT_WEIGHTS.duration
     totalWeight += SLOT_WEIGHTS.duration
+  }
+
+  // Priority
+  if (parsed.priority) {
+    weightedSum += parsed.priority.confidence * SLOT_WEIGHTS.priority
+    totalWeight += SLOT_WEIGHTS.priority
   }
 
   // Who (people)
@@ -236,6 +243,11 @@ export function buildSuggestedTask(
   } else {
     task.who = "solo"
     task.whoType = "solo"
+  }
+
+  // Priority (p1-p4)
+  if (parsed.priority && parsed.priority.confidence >= SUGGEST_THRESHOLD) {
+    task.priority = parsed.priority.value
   }
 
   return task

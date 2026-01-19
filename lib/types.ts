@@ -9,6 +9,9 @@ export type LocationType = 'gym' | 'home' | 'office' | 'venue' | 'online' | 'oth
 // Ollama connection status
 export type OllamaStatus = 'connected' | 'disconnected' | 'checking'
 
+// Task priority (Todoist-style: 1=highest/urgent, 4=lowest)
+export type TaskPriority = 1 | 2 | 3 | 4
+
 // Parsed slot with confidence scoring
 export interface ParsedSlot<T = string> {
   value: T
@@ -38,6 +41,7 @@ export interface ParsedResult {
   where: ParsedSlot | null          // Location
   who: ParsedWhoSlot | null         // People involved with type classification
   duration: ParsedSlot<number> | null  // Minutes
+  priority: ParsedSlot<TaskPriority> | null  // Task priority (p1-p4)
 
   // Classification (WHY - linked to aspect)
   intent: ParsedSlot<LifeAspect> | null
@@ -451,6 +455,9 @@ export interface Task {
   // Implementation Intention (Gollwitzer) - "When X, I will Y"
   contextCue?: string              // "When it's 7pm and I'm home..."
   implementationPlan?: string      // "...I will change into gym clothes"
+
+  // Priority (Todoist-style: 1=urgent, 4=low)
+  priority?: TaskPriority
 }
 
 export interface RecurrenceTemplate {
@@ -1130,4 +1137,311 @@ export interface ConnectionSuggestion {
     reasoning: string
   }[]
   method: "llm" | "rule-based"
+}
+
+// ========== HABIT TRACKING DIFFERENTIATION ==========
+
+// Logging mode: quick (data only) vs goal-linked (counts toward progress)
+export type LoggingMode = "quick" | "goal-linked"
+
+// Unified activity summary for history views
+export interface ActivitySummary {
+  id: string
+  type: "training" | "meal"
+  date: string
+  title: string                    // e.g., "Muay Thai 90min" or "Dinner - Nasi Lemak"
+  aspect: LifeAspect
+  linkedGoalId?: string
+  linkedGoalTitle?: string         // Denormalized for display
+  countsTowardGoal: boolean        // Key distinction: linked items count, quick logs don't
+  metadata?: {
+    // Training-specific
+    duration?: number
+    intensity?: number
+    trainingType?: TrainingType
+    // Meal-specific
+    cooked?: boolean
+    mealType?: MealType
+  }
+  createdAt: Date
+}
+
+// Goal progress for habit tracking dashboard
+export interface HabitGoalProgress {
+  goalId: string
+  goalTitle: string
+  target: number
+  period: "day" | "week" | "month"
+  current: number
+  percentage: number
+  linkedSessions: number           // Count of goal-linked items
+  streak: number
+}
+
+// Combined habit tracking stats for dashboard
+export interface HabitTrackingStats {
+  // Goal-linked progress (must track)
+  goalProgress: HabitGoalProgress[]
+
+  // Activity summary (all items - nice to have)
+  activitySummary: {
+    totalSessions: number
+    linkedSessions: number
+    unlinkedSessions: number
+    thisWeek: number
+    thisMonth: number
+  }
+}
+
+// Cooking ratio stats (always tracks ALL meals)
+export interface CookingRatioStats {
+  allTime: { cooked: number; ordered: number; total: number; ratio: number }
+  thisWeek: { cooked: number; ordered: number; total: number; ratio: number }
+  thisMonth: { cooked: number; ordered: number; total: number; ratio: number }
+}
+
+// Quick log entry for minimal friction capture
+export interface QuickLogEntry {
+  type: "training" | "meal"
+  date?: string                    // Defaults to today
+  // Training fields
+  trainingType?: TrainingType
+  duration?: number
+  intensity?: number
+  // Meal fields
+  mealName?: string
+  cooked?: boolean
+  mealType?: MealType
+  // Common
+  notes?: string
+}
+
+// ========== COOKING SEQUENCER ==========
+
+// Session lifecycle status
+export type CookingSessionStatus = "planning" | "optimized" | "in_progress" | "completed" | "cancelled"
+
+// Event types for guided cooking mode
+export type PhaseEventType = "preheat_start" | "add_item" | "shake_reminder" | "remove_item" | "phase_complete"
+
+// Individual item in a cooking session
+export interface SessionItem {
+  id: string
+  name: string
+  temperature: number           // Celsius
+  timeMinutes: number
+  shakeHalfway: boolean
+  sourceRecipeId?: string       // Optional link to saved air fryer recipe
+  notes?: string
+  batchId?: string              // User-assigned batch for manual batching
+  // Computed after optimization:
+  phaseId?: string
+  startOffsetMinutes?: number   // When to add (relative to phase start)
+  endOffsetMinutes?: number     // When done (relative to phase start)
+}
+
+// Timeline event for guided mode
+export interface PhaseEvent {
+  id: string
+  minuteOffset: number          // Minutes from phase start
+  eventType: PhaseEventType
+  itemId?: string               // Which item this event relates to
+  itemName?: string             // Denormalized for display
+  instruction: string           // Human-readable instruction
+  completed?: boolean           // Track completion during execution
+}
+
+// Temperature phase (items cooked together at same temp)
+export interface CookingPhase {
+  id: string
+  order: number
+  targetTemperature: number     // Celsius
+  totalDurationMinutes: number
+  itemIds: string[]
+  restMinutesAfter: number      // Rest between phases for temp change
+  events: PhaseEvent[]
+  // Execution state
+  startedAt?: Date
+  completedAt?: Date
+}
+
+// User-defined batch (group of items that fit together in the basket)
+export interface CookingBatch {
+  id: string
+  order: number
+  itemIds: string[]
+  userNotes?: string              // Optional: "Protein batch", "Veggies"
+  // Computed:
+  targetTemperature?: number      // Average temp of items in batch
+  estimatedDurationMinutes?: number
+}
+
+// Temperature compatibility hint for batch planning UI
+export interface TemperatureHint {
+  severity: "ok" | "warning" | "mismatch"
+  message: string
+  temperatureRange: { min: number; max: number }
+}
+
+// Full cooking session
+export interface CookingSession {
+  id: string
+  status: CookingSessionStatus
+  items: SessionItem[]
+  phases: CookingPhase[]
+  totalEstimatedMinutes: number
+  // Manual batching support
+  batches: CookingBatch[]
+  useManualBatching: boolean
+  // Execution tracking
+  currentPhaseIndex?: number
+  currentEventIndex?: number
+  startedAt?: Date
+  completedAt?: Date
+  // Metadata
+  createdAt: Date
+  updatedAt: Date
+}
+
+// Optimization result from the algorithm
+export interface OptimizationResult {
+  phases: CookingPhase[]
+  totalMinutes: number
+  temperatureGroups: number     // How many distinct temp phases
+  parallelItems: number         // Items cooked in parallel within phases
+  efficiencyGain: number        // Estimated time saved vs sequential cooking
+}
+
+// Quick add item form data
+export interface QuickAddItem {
+  name: string
+  temperature: number
+  timeMinutes: number
+  shakeHalfway: boolean
+}
+
+// ========== DAILY EXCAVATION TYPES ==========
+
+// Theme for each day's excavation conversation
+export type ExcavationTheme =
+  | "direction"     // Monday: What's the ONE thing this week?
+  | "anti-vision"   // Tuesday: What behavior would future-you regret?
+  | "identity"      // Wednesday: What did you do that the old you wouldn't?
+  | "resistance"    // Thursday: What are you avoiding?
+  | "vision"        // Friday: How do you want to feel by Sunday?
+  | "constraints"   // Saturday: Did you break your own rules?
+  | "synthesis"     // Sunday: What pattern do you notice?
+
+// Individual prompt within a daily excavation
+export interface ExcavationPrompt {
+  id: string
+  theme: ExcavationTheme
+  order: number                    // Order within the theme (1, 2, 3...)
+  question: string
+  placeholder?: string
+  isRequired: boolean
+  minLength?: number               // Encourage depth on important questions
+}
+
+// User's response to a single prompt
+export interface ExcavationResponse {
+  promptId: string
+  question: string
+  answer: string                   // Raw user input, NEVER modified
+  answeredAt: Date
+  skipped: boolean
+}
+
+// A single day's excavation conversation
+export interface DailyExcavation {
+  id: string
+  date: string                     // "2026-01-19" - the day this excavation is for
+  theme: ExcavationTheme           // Determined by day of week
+
+  // Progress tracking (for pause/resume)
+  currentPromptIndex: number
+  isComplete: boolean
+
+  // Timing
+  startedAt: Date
+  lastActiveAt: Date               // For resume context
+  completedAt?: Date
+
+  // Responses
+  responses: ExcavationResponse[]
+
+  // Optional: Key insight user tags from this session
+  insight?: string                 // One-line takeaway (user-written)
+
+  createdAt: Date
+  updatedAt: Date
+}
+
+// Aggregated vision that builds over time from daily excavations
+// This is the "foundation" that emerges from consistent daily reflection
+export interface EmergentVision {
+  id: string
+
+  // Anti-Vision (compiled from anti-vision theme responses)
+  antiVisionStatements: string[]   // Raw responses about life to avoid
+  antiVisionSummary?: string       // User-written summary (optional)
+
+  // Vision (compiled from vision theme responses)
+  visionStatements: string[]       // Raw responses about desired life
+  visionSummary?: string           // User-written summary (optional)
+
+  // Identity (compiled from identity theme responses)
+  identityWins: string[]           // Things done that old self wouldn't
+  identityStatement?: string       // "I am becoming someone who..."
+
+  // Constraints (compiled from constraints theme responses)
+  brokenRules: string[]            // Rules user noticed they broke
+  constraints: string[]            // User-defined rules
+
+  // Meta
+  lastUpdatedFromExcavation: Date
+  excavationCount: number          // How many daily excavations contributed
+
+  createdAt: Date
+  updatedAt: Date
+}
+
+// ========== INGREDIENT RECOGNITION TYPES ==========
+
+// Category of ingredient for air fryer cooking (different from pantry categories)
+export type AirFryerCategory =
+  | "protein"      // Chicken, beef, fish, tofu
+  | "vegetable"    // Broccoli, potatoes, brussels sprouts
+  | "frozen"       // Frozen items (adjusts time)
+  | "bread"        // Toast, croutons, pastries
+  | "snack"        // Chips, nuts, appetizers
+  | "other"
+
+// Database entry for a known ingredient
+export interface IngredientEntry {
+  names: string[]                // ["chicken breast", "breast", "chicken fillet"]
+  temperature: number            // Recommended temp (C)
+  timeMinutes: number            // Recommended time
+  timeRange?: [number, number]   // Optional range (e.g., [18, 25])
+  shakeHalfway: boolean
+  category: AirFryerCategory
+  notes?: string                 // "Flip at 10 min for crispy skin"
+  frozen?: {                     // Adjustments for frozen variant
+    addMinutes: number
+    addTemp?: number
+  }
+}
+
+// Suggestion returned from ingredient recognition
+export interface IngredientSuggestion {
+  ingredient: string             // Display name (e.g., "Chicken Breast")
+  temperature: number            // Suggested temp (C)
+  timeMinutes: number            // Suggested time
+  timeRange?: [number, number]   // Optional range
+  shakeHalfway: boolean
+  category: AirFryerCategory
+  confidence: number             // 0-1 match confidence
+  source: "database" | "recipe" | "ollama"
+  notes?: string                 // Cooking tips
+  matchedName?: string           // Which alias matched
 }
